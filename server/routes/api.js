@@ -6,7 +6,7 @@ import { getCredentials, saveCredentials, deleteCredentials, configuredPlatforms
 import { syncAll, syncAccount, syncState, storeAccountData } from '../collector.js';
 import * as analysis from '../analysis.js';
 import { overviewInsights, competitorInsights } from '../insights.js';
-import { authEnabled, isAuthenticated, login, logout } from '../auth.js';
+import { authEnabled, userFromRequest, login, logout, publicUser, listUsers, createUser, setPassword, deleteUser, getUser, countAdmins, verifyUser, refreshCookie } from '../auth.js';
 import { parseCsv, toCsv, IMPORT_TEMPLATE } from '../csv.js';
 
 const bad = (reply, message, code = 400) => reply.code(code).send({ error: message });
@@ -26,23 +26,58 @@ function nextColorSlot() {
 }
 
 export default async function routes(app) {
-  /* ---- session ---- */
+  /* ---- session & users ---- */
   app.get('/api/health', async () => ({ ok: true, time: nowIso() }));
-  app.get('/api/session', async (req) => ({ authRequired: authEnabled(), authenticated: isAuthenticated(req) }));
-  app.post('/api/login', { config: { rateLimit: true } }, async (req, reply) => {
+  app.get('/api/session', async (req) => {
+    const u = authEnabled() ? userFromRequest(req) : { id: 0, username: 'local', role: 'admin' };
+    return { authRequired: authEnabled(), authenticated: Boolean(u), user: publicUser(u) };
+  });
+  app.post('/api/login', async (req, reply) => {
     if (!authEnabled()) return { ok: true };
-    if (!login(reply, req.body?.password)) return bad(reply, 'Wrong password', 401);
-    return { ok: true };
+    const u = login(reply, req.body?.username, req.body?.password);
+    if (!u) return bad(reply, 'Wrong username or password', 401);
+    return { ok: true, user: publicUser(u) };
   });
   app.post('/api/logout', async (req, reply) => { logout(reply); return { ok: true }; });
 
+  app.get('/api/users', async (req, reply) => (req.user?.role === 'admin' ? listUsers() : bad(reply, 'Admins only', 403)));
+  app.post('/api/users', async (req, reply) => {
+    if (req.user?.role !== 'admin') return bad(reply, 'Admins only', 403);
+    try { return { id: createUser({ username: req.body?.username, password: req.body?.password, role: req.body?.role || 'viewer' }) }; }
+    catch (e) { return bad(reply, e.message); }
+  });
+  app.put('/api/users/:id/password', async (req, reply) => {
+    if (req.user?.role !== 'admin') return bad(reply, 'Admins only', 403);
+    const u = getUser(Number(req.params.id));
+    if (!u) return bad(reply, 'Not found', 404);
+    try { setPassword(u.id, req.body?.password); if (u.id === req.user.id) refreshCookie(reply, getUser(u.id)); return { ok: true }; }
+    catch (e) { return bad(reply, e.message); }
+  });
+  app.delete('/api/users/:id', async (req, reply) => {
+    if (req.user?.role !== 'admin') return bad(reply, 'Admins only', 403);
+    const u = getUser(Number(req.params.id));
+    if (!u) return bad(reply, 'Not found', 404);
+    if (u.role === 'admin' && countAdmins() <= 1) return bad(reply, 'Cannot delete the last admin');
+    if (u.id === req.user.id) return bad(reply, 'You cannot delete your own account while signed in');
+    deleteUser(u.id);
+    return { ok: true };
+  });
+  /** Any signed-in user may change their own password by proving the current one. */
+  app.put('/api/me/password', async (req, reply) => {
+    if (!authEnabled()) return bad(reply, 'Authentication is disabled (AUTH_DISABLED=1)');
+    if (!verifyUser(req.user.username, req.body?.currentPassword)) return bad(reply, 'Current password is wrong', 401);
+    try { setPassword(req.user.id, req.body?.password); refreshCookie(reply, getUser(req.user.id)); return { ok: true }; }
+    catch (e) { return bad(reply, e.message); }
+  });
+
   /* ---- meta ---- */
-  app.get('/api/meta', async () => ({
+  app.get('/api/meta', async (req) => ({
     providers: describeProviders(configuredPlatforms()),
     sync: { intervalMinutes: config.syncIntervalMinutes, lookbackDays: config.lookbackDays, postsPerAccount: config.postsPerAccount, concurrency: config.syncConcurrency },
     stats: analysis.stats(),
     importTemplate: IMPORT_TEMPLATE,
     authRequired: authEnabled(),
+    user: publicUser(authEnabled() ? userFromRequest(req) : { id: 0, username: 'local', role: 'admin' }),
   }));
 
   /* ---- competitors & accounts ---- */

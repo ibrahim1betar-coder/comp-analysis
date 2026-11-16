@@ -28,6 +28,7 @@ const state = {
   param: null,
   filters: { range: '30d', from: '', to: '', platforms: [], competitors: [] },
   meta: null,
+  user: null,
   competitorList: [],
 };
 
@@ -159,6 +160,8 @@ const ctx = {
   query: filterQuery,
   get filters() { return state.filters; },
   get meta() { return state.meta; },
+  get user() { return state.user; },
+  get isAdmin() { return !state.user || state.user.role === 'admin'; },
   navigate, toast, startSync, pollSync, refreshMeta, clearDemo,
   setTitle(title, sub) { $('#page-title').textContent = title; $('#page-sub').textContent = sub || ''; document.title = `${title} · Competitor Pulse`; },
 };
@@ -187,16 +190,19 @@ async function route() {
 
 /* ---------- auth ---------- */
 function showLogin(message) {
-  const pw = h('input', { class: 'input', type: 'password', placeholder: 'Dashboard password', autofocus: true, autocomplete: 'current-password' });
+  const user = h('input', { class: 'input', type: 'text', placeholder: 'Username', autofocus: true, autocomplete: 'username', autocapitalize: 'off', spellcheck: 'false' });
+  const pw = h('input', { class: 'input', type: 'password', placeholder: 'Password', autocomplete: 'current-password' });
   const msg = h('div', { class: 'status-msg bad', hidden: true });
   const form = h('form', { class: 'card', onSubmit: async (e) => {
     e.preventDefault();
-    try { await post('/api/login', { password: pw.value }); location.reload(); }
+    try { await post('/api/login', { username: user.value.trim(), password: pw.value }); location.reload(); }
     catch (err) { msg.hidden = false; msg.textContent = err.message; }
   } },
     h('div', { class: 'brand', style: { padding: 0 } }, h('div', { class: 'brand-mark' }, 'CP'), h('div', null, h('div', { class: 'brand-name' }, 'Competitor Pulse'), h('div', { class: 'brand-sub' }, 'Sign in to continue'))),
     message ? h('p', { class: 'small secondary' }, message) : null,
-    pw, msg,
+    h('label', { class: 'field' }, 'Username', user),
+    h('label', { class: 'field' }, 'Password', pw),
+    msg,
     h('button', { class: 'btn primary', type: 'submit' }, icon('lock'), 'Sign in'),
   );
   document.body.replaceChildren(h('div', { class: 'login' }, form));
@@ -209,7 +215,15 @@ async function boot() {
   if (session.authRequired && !session.authenticated) return showLogin();
   $('#theme-toggle').addEventListener('click', () => { applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'); currentView?.update().catch(showError); });
   $('#sync-btn').addEventListener('click', () => startSync());
-  if (session.authRequired) { const lo = $('#logout-btn'); lo.hidden = false; lo.addEventListener('click', async () => { await post('/api/logout'); location.reload(); }); }
+  state.user = session.user;
+  if (session.authRequired) {
+    const lo = $('#logout-btn'); lo.hidden = false;
+    lo.textContent = `Sign out (${session.user.username})`;
+    lo.addEventListener('click', async () => { await post('/api/logout'); location.reload(); });
+    if (session.user.mustChange) {
+      $('#page-head-banner').append(h('div', { class: 'banner warn' }, h('p', null, 'You are signed in with the default password. ', h('a', { href: '#/connect?users=1' }, 'Change it now'), ' under Users & access.')));
+    }
+  }
   await refreshMeta();
   window.addEventListener('hashchange', route);
   await route();

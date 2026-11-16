@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { config } from './config.js';
 import routes from './routes/api.js';
-import { requireAuth } from './auth.js';
+import { requireAuth, ensureAdmin, authEnabled } from './auth.js';
 import { startScheduler } from './collector.js';
 import { stats } from './analysis.js';
 
@@ -44,6 +44,7 @@ export async function build() {
   });
 
   await app.register(routes);
+  app.decorate('firstAdmin', authEnabled() ? ensureAdmin() : null);
 
   // Static assets: Chart.js straight from node_modules (immutable), app files with revalidation.
   await app.register(fastifyStatic, { root: join(root, 'node_modules/chart.js/dist'), prefix: '/vendor/chartjs/', decorateReply: false, maxAge: '365d', immutable: true });
@@ -60,8 +61,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   try {
     await app.listen({ port: config.port, host: config.host });
     const s = stats();
-    app.log.info(`Competitor Pulse ready: ${s.competitors} competitors, ${s.accounts} accounts, ${s.posts} posts. Login ${config.password ? 'enabled' : 'disabled (set DASHBOARD_PASSWORD)'}.`);
-    console.log(`\n  ➜  Open http://localhost:${config.port} in your browser${s.posts ? '' : '  (tip: run "npm run seed" first to see demo data)'}\n`);
+    app.log.info(`Competitor Pulse ready: ${s.competitors} competitors, ${s.accounts} accounts, ${s.posts} posts. Login ${authEnabled() ? 'required' : 'disabled (AUTH_DISABLED=1)'}.`);
+    const created = app.firstAdmin;
+    console.log(`\n  ➜  Open http://localhost:${config.port} in your browser${s.posts ? '' : '  (tip: run "npm run seed" first to see demo data)'}`);
+    if (created) console.log(`  ➜  First admin account created: username "${created.username}", password "${created.password}"${created.isDefault ? '  ← change it after signing in (Connect → Users & access)' : ''}`);
+    console.log('');
     startScheduler(app.log);
   } catch (err) {
     if (err.code === 'EADDRINUSE') {

@@ -6,3 +6,4 @@ process.env.DB_PATH = join(mkdtempSync(join(tmpdir(), 'cp-test-')), 'test.db');
 process.env.APP_SECRET = 'test-secret';
 process.env.SYNC_INTERVAL_MINUTES = '0';
 process.env.LOG_LEVEL = 'silent';
+process.env.AUTH_DISABLED ??= '1';

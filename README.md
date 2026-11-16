@@ -19,6 +19,15 @@ npm start         # http://localhost:3000
 
 Requires Node.js 22.13 or newer (uses the built-in SQLite driver, no native builds).
 
+Sign in with the default account, then change its password:
+
+| Username | Password |
+|---|---|
+| `admin` | `admin123` |
+
+(Set `ADMIN_USERNAME` / `ADMIN_PASSWORD` in `.env` before the first start to pick your own. More users,
+including read-only viewers, are added inside the app under **Connect → Users & access**.)
+
 Then open **Connect** in the sidebar:
 
 1. Paste API credentials for each platform (tested on save, stored encrypted).
@@ -47,7 +56,8 @@ Copy `.env.example` to `.env`:
 | Variable | Default | Purpose |
 |---|---|---|
 | `PORT`, `HOST` | `3000`, `0.0.0.0` | Where the website listens |
-| `DASHBOARD_PASSWORD` | empty | Set it to require a login (recommended for anything not on localhost) |
+| `ADMIN_USERNAME`, `ADMIN_PASSWORD` | `admin`, `admin123` | First admin account, created on first start only |
+| `AUTH_DISABLED` | `0` | `1` runs without login (local use only) |
 | `APP_SECRET` | auto-generated in `data/.secret` | Key used to encrypt API credentials at rest |
 | `SYNC_INTERVAL_MINUTES` | `360` | Background collection interval (`0` disables the scheduler) |
 | `SYNC_CONCURRENCY` | `3` | Accounts collected in parallel (interleaved across platforms) |
@@ -79,7 +89,7 @@ Copy `.env.example` to `.env`:
 ## Security
 
 * Credentials are encrypted with AES-256-GCM before they touch disk; the UI only ever sees masked values.
-* Optional password login with an HMAC-signed, `HttpOnly` cookie and login rate limiting.
+* Username/password accounts (scrypt-hashed), admin and read-only viewer roles, HMAC-signed `HttpOnly` session cookies that are invalidated on password change, login rate limiting.
 * Strict Content-Security-Policy (no inline scripts), `nosniff`, no referrer leakage to platforms' CDNs.
 * All data stays on your server. Nothing is sent anywhere except the platforms' own APIs.
 
@@ -113,8 +123,18 @@ test/             node:test suites: analysis, API, providers, CSV, crypto
 | `PUT /api/credentials/:platform` · `POST /api/credentials/:platform/test` | Connect platforms |
 | `POST /api/sync` · `GET /api/sync/status` · `GET /api/sync/runs` | Collection control |
 | `POST /api/import` (text/csv) · `GET /api/import/template.csv` | Manual data |
+| `POST /api/login` · `GET /api/users` · `POST /api/users` · `PUT /api/me/password` | Accounts |
 
 Date ranges accept `range=7d|30d|90d|180d|365d|all` or `from=YYYY-MM-DD&to=YYYY-MM-DD`.
+
+## Deploying (Docker)
+
+```bash
+docker build -t competitor-pulse .
+docker run -d -p 3000:3000 -v competitor-pulse-data:/app/data -e ADMIN_PASSWORD=choose-a-strong-one competitor-pulse
+```
+
+The image works unchanged on Railway, Render, Fly.io or any VPS. Keep the `/app/data` volume: it holds the database and the credential-encryption key.
 
 ## Troubleshooting
 

@@ -15,7 +15,10 @@ export async function api(path, { method = 'GET', body, raw = false, headers = {
   if (method === 'GET' && etags.has(path)) init.headers['If-None-Match'] = etags.get(path);
   const res = await fetch(path, init);
   if (res.status === 304 && bodies.has(path)) return bodies.get(path);
-  if (res.status === 401) { window.dispatchEvent(new CustomEvent('auth:required')); throw new HttpError(401, 'Authentication required'); }
+  if (res.status === 401 && !path.startsWith('/api/login') && !path.startsWith('/api/me/')) {
+    window.dispatchEvent(new CustomEvent('auth:required'));
+    throw new HttpError(401, 'Authentication required');
+  }
   if (raw) return res;
   const text = await res.text();
   let data = null;

@@ -73,6 +73,7 @@ export function create(ctx) {
   const syncBox = h('div');
   const importBox = h('div');
   const runsBox = h('div');
+  const usersBox = h('div');
 
   el.append(
     card('How it works', 'Four steps from zero to a live competitor dashboard', h('div', { class: 'steps' },
@@ -84,6 +85,7 @@ export function create(ctx) {
     h('div', null, h('h2', { style: { marginBottom: '10px' } }, 'Platform connections'), platformsBox),
     syncBox,
     importBox,
+    usersBox,
     card('How the analysis works', 'Definitions used everywhere in the dashboard', h('dl', { class: 'defs' },
       h('div', null, h('dt', null, 'Interactions'), h('dd', null, 'Likes (or reactions) + comments + shares (reposts, quotes) + saves (bookmarks) on posts published inside the selected period.')),
       h('div', null, h('dt', null, 'Video views'), h('dd', null, 'View counts reported by the platform. YouTube, TikTok and X expose them for any account; Instagram and Facebook only for accounts you own, so they show n/a unless imported.')),
@@ -105,7 +107,65 @@ export function create(ctx) {
     replace(syncBox, syncCard(status, competitors));
     replace(importBox, importCard());
     replace(runsBox, card('Recent collection runs', null, runsTable(runs)));
+    replace(usersBox, await usersCard());
+    if (location.hash.includes('users=1')) usersBox.scrollIntoView({ behavior: 'smooth' });
   }
+
+  async function usersCard() {
+    if (!ctx.meta.authRequired) return card('Users & access', 'Login is disabled (AUTH_DISABLED=1). Remove that setting to require a username and password.', h('div'));
+    const me = ctx.user;
+    const msg = h('div');
+    const say = (text, ok = true) => replace(msg, h('div', { class: `status-msg ${ok ? 'ok' : 'bad'}` }, text));
+
+    // change my own password
+    const cur = h('input', { class: 'input', type: 'password', placeholder: 'Current password', autocomplete: 'current-password' });
+    const nw = h('input', { class: 'input', type: 'password', placeholder: 'New password (8+ characters)', autocomplete: 'new-password' });
+    const mine = h('form', { class: 'actions', onSubmit: async (e) => {
+      e.preventDefault();
+      try { await put('/api/me/password', { currentPassword: cur.value, password: nw.value }); say('Password changed.'); cur.value = nw.value = ''; location.hash = '#/connect'; setTimeout(() => location.reload(), 800); }
+      catch (err) { say(err.message, false); }
+    } }, cur, nw, h('button', { class: 'btn primary', type: 'submit' }, 'Change my password'));
+
+    let adminPart = null;
+    if (me.role === 'admin') {
+      const users = await get('/api/users');
+      const uname = h('input', { class: 'input', placeholder: 'Username', autocomplete: 'off' });
+      const upass = h('input', { class: 'input', type: 'password', placeholder: 'Password (8+ characters)', autocomplete: 'new-password' });
+      const role = h('select', { class: 'select' }, h('option', { value: 'viewer' }, 'Viewer (read only)'), h('option', { value: 'admin' }, 'Admin'));
+      const add = h('form', { class: 'actions', onSubmit: async (e) => {
+        e.preventDefault();
+        try { await post('/api/users', { username: uname.value.trim(), password: upass.value, role: role.value }); say(`Created ${uname.value.trim()}.`); update(); }
+        catch (err) { say(err.message, false); }
+      } }, uname, upass, role, h('button', { class: 'btn primary', type: 'submit' }, icon('plus'), 'Add user'));
+      adminPart = h('div', { style: { display: 'grid', gap: '12px' } },
+        h('h4', null, 'All users'),
+        h('div', { class: 'table-wrap' }, h('table', null,
+          h('thead', null, h('tr', null, h('th', null, 'Username'), h('th', null, 'Role'), h('th', null, 'Last sign-in'), h('th', null, ''))),
+          h('tbody', null, users.map((u) => h('tr', null,
+            h('td', null, u.username, u.id === me.id ? h('span', { class: 'badge info', style: { marginLeft: '8px' } }, 'you') : null, u.mustChange ? h('span', { class: 'badge warn', style: { marginLeft: '8px' } }, 'default password') : null),
+            h('td', null, u.role),
+            h('td', null, u.lastLoginAt ? relTime(u.lastLoginAt) : 'never'),
+            h('td', null, h('div', { class: 'actions' },
+              h('button', { class: 'btn ghost sm', onClick: async () => {
+                const p = prompt(`New password for ${u.username} (8+ characters):`);
+                if (!p) return;
+                try { await put(`/api/users/${u.id}/password`, { password: p }); say(`Password for ${u.username} updated.`); update(); } catch (err) { say(err.message, false); }
+              } }, 'Reset password'),
+              u.id !== me.id ? h('button', { class: 'btn ghost sm danger', onClick: async () => {
+                if (!confirm(`Delete user ${u.username}?`)) return;
+                try { await del(`/api/users/${u.id}`); update(); } catch (err) { say(err.message, false); }
+              } }, icon('trash')) : null,
+            )),
+          ))),
+        )),
+        h('h4', null, 'Add a user'),
+        add,
+      );
+    }
+    return card('Users & access', `Signed in as ${me.username} (${me.role}). Admins manage data and users; viewers can only look.`,
+      h('div', { style: { display: 'grid', gap: '14px' } }, h('div', null, h('h4', null, 'My password'), mine), adminPart, msg));
+  }
+
 
   function platformCard(p, saved, competitors) {
     const g = GUIDES[p.id];
