@@ -116,6 +116,17 @@ test/             node:test suites: analysis, API, providers, CSV, crypto
 
 Date ranges accept `range=7d|30d|90d|180d|365d|all` or `from=YYYY-MM-DD&to=YYYY-MM-DD`.
 
+## Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| `Cannot find module 'node:sqlite'` or "needs Node.js 22.13 or newer" | Install Node 22 LTS or newer from https://nodejs.org, check with `node --version`, then run `npm start` again. |
+| `Cannot find package 'fastify'` or "Dependencies are not installed" | Run `npm install` inside the project folder first. |
+| `EADDRINUSE` / "Port 3000 is already in use" | Start on another port: `PORT=4000 npm start` (PowerShell: `$env:PORT=4000; npm start`). |
+| Browser shows an empty dashboard | Run `npm run seed` for demo data, or connect a platform and add competitors on the Connect page, then click Sync now. |
+| `npm start` opens nothing | It does not open a browser by itself: go to http://localhost:3000 once the terminal prints "ready". |
+| Sync fails with "not connected" | Save credentials for that platform on the Connect page; the test must pass before accounts can be collected. |
+
 ## Tests
 
 ```bash

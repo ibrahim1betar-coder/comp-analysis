@@ -61,9 +61,16 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     await app.listen({ port: config.port, host: config.host });
     const s = stats();
     app.log.info(`Competitor Pulse ready: ${s.competitors} competitors, ${s.accounts} accounts, ${s.posts} posts. Login ${config.password ? 'enabled' : 'disabled (set DASHBOARD_PASSWORD)'}.`);
+    console.log(`\n  ➜  Open http://localhost:${config.port} in your browser${s.posts ? '' : '  (tip: run "npm run seed" first to see demo data)'}\n`);
     startScheduler(app.log);
   } catch (err) {
-    app.log.error(err);
+    if (err.code === 'EADDRINUSE') {
+      console.error(`\nPort ${config.port} is already in use. Stop the other program or start with a different port, e.g.:\n  PORT=4000 npm start   (Windows PowerShell: $env:PORT=4000; npm start)\n`);
+    } else if (err.code === 'EACCES') {
+      console.error(`\nNo permission to listen on port ${config.port}. Use a port above 1024, e.g. PORT=3000 npm start.\n`);
+    } else {
+      app.log.error(err);
+    }
     process.exit(1);
   }
 }

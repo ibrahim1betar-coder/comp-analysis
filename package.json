@@ -4,12 +4,14 @@
   "description": "Competitor social media analysis dashboard: collects interactions and video views across YouTube, Instagram, Facebook, TikTok and X and analyses them in one place.",
   "type": "module",
   "main": "server/index.js",
-  "engines": { "node": ">=22.13" },
+  "engines": {
+    "node": ">=22.13"
+  },
   "scripts": {
-    "start": "node --no-warnings=ExperimentalWarning server/index.js",
-    "dev": "node --no-warnings=ExperimentalWarning --watch server/index.js",
-    "seed": "node --no-warnings=ExperimentalWarning server/seed.js",
-    "sync": "node --no-warnings=ExperimentalWarning server/cli-sync.js",
+    "start": "node server/start.js index",
+    "dev": "WATCH=1 node server/start.js index",
+    "seed": "node server/start.js seed",
+    "sync": "node server/start.js cli-sync",
     "test": "node --no-warnings=ExperimentalWarning --test test/*.test.js"
   },
   "license": "MIT",
