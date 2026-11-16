@@ -1,0 +1,113 @@
+import { fetchJson, qs, ApiError } from '../http.js';
+
+const API = 'https://open.tiktokapis.com/v2';
+const tokenCache = new Map(); // clientKey -> { token, expiresAt }
+
+export function parseHandle(input) {
+  const h = String(input).trim();
+  const m = h.match(/tiktok\.com\/@([A-Za-z0-9_.]+)/i);
+  return (m ? m[1] : h.replace(/^@/, '')).toLowerCase();
+}
+
+const yyyymmdd = (d) => d.toISOString().slice(0, 10).replace(/-/g, '');
+
+async function getToken(creds) {
+  const cached = tokenCache.get(creds.clientKey);
+  if (cached && cached.expiresAt > Date.now() + 60_000) return cached.token;
+  const data = await fetchJson(`${API}/oauth/token/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: qs({ client_key: creds.clientKey, client_secret: creds.clientSecret, grant_type: 'client_credentials' }),
+  });
+  if (!data.access_token) throw new ApiError(data.error_description || data.error || 'TikTok did not return an access token', { status: 401 });
+  tokenCache.set(creds.clientKey, { token: data.access_token, expiresAt: Date.now() + (data.expires_in || 7200) * 1000 });
+  return data.access_token;
+}
+
+export default {
+  id: 'tiktok',
+  name: 'TikTok',
+  capabilities: { views: true, interactions: true, followers: true, shares: true, saves: false },
+  credentialFields: [
+    { key: 'clientKey', label: 'Research API client key', secret: false, placeholder: 'aw…' },
+    { key: 'clientSecret', label: 'Research API client secret', secret: true, placeholder: '…' },
+  ],
+  handlePlaceholder: '@username or profile URL',
+
+  async test(creds) {
+    await getToken(creds);
+    return 'Client credentials accepted. Your app needs approved access to the TikTok Research API.';
+  },
+
+  async fetchAccount(handle, creds, { since, maxPosts }) {
+    const username = parseHandle(handle);
+    const token = await getToken(creds);
+    const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+
+    const info = await fetchJson(`${API}/research/user/info/?fields=display_name,avatar_url,follower_count,following_count,likes_count,video_count`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ username }),
+    });
+    const u = info.data || {};
+    if (info.error && info.error.code && info.error.code !== 'ok') throw new ApiError(info.error.message || 'TikTok user lookup failed', { status: 400 });
+    const profile = {
+      externalId: username,
+      displayName: u.display_name || username,
+      avatarUrl: u.avatar_url || null,
+      profileUrl: `https://www.tiktok.com/@${username}`,
+      followers: u.follower_count ?? null,
+      following: u.following_count ?? null,
+      postsCount: u.video_count ?? null,
+      totalViews: null,
+      totalLikes: u.likes_count ?? null,
+    };
+
+    // The Research API accepts at most 30 days per query, so walk back in 30-day windows.
+    const posts = [];
+    const end = new Date();
+    const floor = since ? new Date(since) : new Date(Date.now() - 90 * 86400_000);
+    let windowEnd = new Date(end);
+    while (windowEnd > floor && posts.length < maxPosts) {
+      const windowStart = new Date(Math.max(floor.getTime(), windowEnd.getTime() - 29 * 86400_000));
+      let cursor = 0;
+      let searchId;
+      let hasMore = true;
+      while (hasMore && posts.length < maxPosts) {
+        const res = await fetchJson(`${API}/research/video/query/?fields=id,create_time,username,like_count,comment_count,share_count,view_count,video_description,region_code`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            query: { and: [{ operation: 'EQ', field_name: 'username', field_values: [username] }] },
+            start_date: yyyymmdd(windowStart),
+            end_date: yyyymmdd(windowEnd),
+            max_count: 100,
+            cursor,
+            search_id: searchId,
+          }),
+        });
+        const d = res.data || {};
+        for (const v of d.videos || []) {
+          posts.push({
+            externalId: String(v.id),
+            publishedAt: new Date((v.create_time || 0) * 1000).toISOString(),
+            type: 'video',
+            url: `https://www.tiktok.com/@${username}/video/${v.id}`,
+            caption: v.video_description || '',
+            thumbnailUrl: null,
+            views: v.view_count ?? 0,
+            likes: v.like_count ?? 0,
+            comments: v.comment_count ?? 0,
+            shares: v.share_count ?? 0,
+            saves: 0,
+          });
+        }
+        hasMore = Boolean(d.has_more);
+        cursor = d.cursor ?? cursor + 100;
+        searchId = d.search_id ?? searchId;
+      }
+      windowEnd = new Date(windowStart.getTime() - 86400_000);
+    }
+    return { profile, posts };
+  },
+};

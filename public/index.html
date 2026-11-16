@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Competitor Pulse</title>
+  <meta name="description" content="Competitor social media analysis: interactions and video views across YouTube, Instagram, Facebook, TikTok and X.">
+  <meta name="color-scheme" content="light dark">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/css/app.css">
+  <script src="/vendor/chartjs/chart.umd.js" defer></script>
+  <script type="module" src="/js/app.js"></script>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <a class="brand" href="#/overview">
+        <div class="brand-mark">CP</div>
+        <div>
+          <div class="brand-name">Competitor Pulse</div>
+          <div class="brand-sub">Social benchmarking</div>
+        </div>
+      </a>
+      <nav class="nav" aria-label="Main">
+        <a href="#/overview" data-route="overview"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 13h8V3H3v10Zm0 8h8v-6H3v6Zm10 0h8V11h-8v10Zm0-18v6h8V3h-8Z"/></svg><span>Overview</span></a>
+        <a href="#/competitors" data-route="competitors"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 11c1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3 1.34 3 3 3Zm-8 0c1.66 0 3-1.34 3-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3Zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5Zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5Z"/></svg><span>Competitors</span></a>
+        <a href="#/posts" data-route="posts"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v2H4V6Zm0 5h16v2H4v-2Zm0 5h10v2H4v-2Z"/></svg><span>Posts</span></a>
+        <a href="#/connect" data-route="connect"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M17 7h-4v2h4a3 3 0 1 1 0 6h-4v2h4a5 5 0 0 0 0-10Zm-6 8H7a3 3 0 1 1 0-6h4V7H7a5 5 0 0 0 0 10h4v-2Zm-3-4h8v2H8v-2Z"/></svg><span>Connect</span></a>
+      </nav>
+      <div class="sidebar-footer">
+        <button id="sync-btn" class="btn" type="button" title="Collect the latest data from every connected platform"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4V1L8 5l4 4V6a6 6 0 0 1 5.65 8.03l1.46 1.46A8 8 0 0 0 12 4Zm0 14a6 6 0 0 1-5.65-8.03L4.89 8.51A8 8 0 0 0 12 20v3l4-4-4-4v3Z"/></svg><span class="meta-text">Sync now</span></button>
+        <span id="sync-text" class="meta-text">…</span>
+        <button id="theme-toggle" class="btn ghost sm" type="button" aria-label="Toggle colour theme"></button>
+        <button id="logout-btn" class="btn ghost sm" type="button" hidden>Sign out</button>
+      </div>
+    </aside>
+    <main class="main">
+      <div class="page-head">
+        <div>
+          <h1 id="page-title">Overview</h1>
+          <div id="page-sub" class="sub"></div>
+        </div>
+      </div>
+      <div id="filters" class="filters" style="margin-bottom:16px"></div>
+      <div id="content"></div>
+    </main>
+  </div>
+</body>
+</html>
