@@ -43,13 +43,26 @@ Then open **Connect** in the sidebar:
 | YouTube | Your own Data API v3 key (free) | ✓ | likes, comments | ✓ |
 | Instagram | Apify token (actors `apify/instagram-scraper` + `apify/instagram-profile-scraper`) | ✓ | likes, comments | ✓ reels and videos |
 | Facebook | Apify token (actors `apify/facebook-posts-scraper` + `apify/facebook-pages-scraper`) | ✓ | reactions, comments, shares | when the actor reports them |
-| TikTok | Apify token (actor `clockworks/tiktok-scraper`) **or** the official TikTok Research API | ✓ | likes, comments, shares, saves | ✓ |
+| TikTok | Apify token (actor `clockworks/tiktok-scraper`), **or** Python + yt-dlp (free, no account), **or** the official Research API | ✓ | likes, comments, shares (saves with Apify) | ✓ |
 | X | API v2 bearer token (Basic tier or higher) | ✓ | likes, replies, reposts + quotes, bookmarks | ✓ video views, else impressions |
 
 One Apify token covers Instagram, Facebook and TikTok: paste it once in the Apify card on the Connect page.
 Advanced: override the actors with `APIFY_INSTAGRAM_ACTOR`, `APIFY_INSTAGRAM_PROFILE_ACTOR`, `APIFY_FACEBOOK_ACTOR`,
 `APIFY_FACEBOOK_PAGE_ACTOR`, `APIFY_TIKTOK_ACTOR` in `.env`. Where a metric is unavailable the dashboard
 shows **n/a** rather than a misleading zero, and the **CSV import** accepts post-level metrics from any other tool.
+
+### TikTok through Python (yt-dlp)
+
+Select "Python (yt-dlp)" as the TikTok data source on the Connect page. Requirements on the machine that runs the dashboard:
+
+```bash
+pip install yt-dlp
+```
+
+(Windows: `py -m pip install yt-dlp`; Python 3 from https://www.python.org with "Add Python to PATH" ticked.) The
+dashboard runs `scripts/tiktok_fetch.py`, which reads the video list with yt-dlp's TikTok extractor and the follower
+count from the public profile page. It is free and needs no account, but it is not an official TikTok interface: when
+TikTok changes something, update with `pip install -U yt-dlp`. Set `PYTHON_BIN` in `.env` if Python is not on PATH.
 
 Why Apify rather than Meta's and TikTok's own APIs: Meta's Graph API does not expose competitors' reel views
 and needs app review for public Pages, and TikTok has no public API for other accounts' videos. Fetching
@@ -64,6 +77,7 @@ Copy `.env.example` to `.env`:
 | `PORT`, `HOST` | `3000`, `0.0.0.0` | Where the website listens |
 | `ADMIN_USERNAME`, `ADMIN_PASSWORD` | `admin`, `admin123` | First admin account, created on first start only |
 | `AUTH_DISABLED` | `0` | `1` runs without login (local use only) |
+| `PYTHON_BIN` | auto (`python3` / `python` / `py`) | Python launcher for the TikTok yt-dlp source |
 | `APP_SECRET` | auto-generated in `data/.secret` | Key used to encrypt API credentials at rest |
 | `SYNC_INTERVAL_MINUTES` | `360` | Background collection interval (`0` disables the scheduler) |
 | `SYNC_CONCURRENCY` | `3` | Accounts collected in parallel (interleaved across platforms) |

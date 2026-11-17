@@ -38,14 +38,15 @@ const GUIDES = {
     data: 'Followers, Page likes, posts, reactions, comments, shares, media type.',
   },
   tiktok: {
-    summary: 'Through Apify (default, any public account, no approval) or the official TikTok Research API.',
+    summary: 'Through Apify (default), a free Python fetcher (yt-dlp), or the official TikTok Research API.',
     steps: [
-      ['Choose the data source', 'Apify needs only your Apify token and works for any public account. The Research API is TikTok\'s official route but requires an approved research application.'],
+      ['Choose the data source', 'Apify needs only your Apify token. Python (yt-dlp) is free and needs no account, just Python installed on the machine running the dashboard. The Research API is TikTok\'s official route but requires an approved research application.'],
+      ['Python: install Python 3 and yt-dlp', 'python.org → Downloads → install (tick "Add Python to PATH"), then in a terminal run:  pip install yt-dlp   (Windows: py -m pip install yt-dlp). Select "Python (yt-dlp)" and click Save & test.'],
       ['Apify: link the token above', 'Same token as Instagram and Facebook; TikTok is collected with clockworks/tiktok-scraper.'],
       ['Research API: paste client key and secret', 'developers.tiktok.com → Research API → apply → add the Research API product to your app → copy the credentials.'],
       ['Add competitor accounts', 'Use the @username or profile URL.'],
     ],
-    note: 'TikTok does not offer a public API for other accounts\' videos. Fetching them straight from tiktok.com requires bypassing TikTok\'s anti-bot request signing, which this app deliberately does not do; Apify runs its own infrastructure for that.',
+    note: 'TikTok has no public API for other accounts\' videos. The Python source uses yt-dlp\'s TikTok extractor: it is free but depends on yt-dlp keeping up with TikTok\'s changes (run "pip install -U yt-dlp" when it stops working) and is not an official TikTok interface. Apify and the Research API are the alternatives.',
     data: 'Followers, total likes, video count, views, likes, comments, shares, saves per video.',
   },
   x: {

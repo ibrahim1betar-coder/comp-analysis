@@ -1,6 +1,7 @@
 /** TikTok with two sources: Apify (clockworks/tiktok-scraper, public data) or TikTok's official Research API. */
 import { fetchJson, qs, ApiError } from '../http.js';
 import { runActor, whoAmI, pick, num, when } from '../apify.js';
+import { runPythonJson, findPython, scriptPath } from '../python.js';
 
 const API = 'https://open.tiktokapis.com/v2';
 const tokenCache = new Map(); // clientKey -> { token, expiresAt }
@@ -64,6 +65,14 @@ async function fetchViaApify(username, creds, { since, maxPosts }) {
   return { profile: mapApifyProfile(items, username), posts };
 }
 
+/* ---------- Python (yt-dlp) source ---------- */
+async function fetchViaPython(username, { since, maxPosts }) {
+  const data = await runPythonJson(scriptPath('tiktok_fetch.py'), [username, String(Math.min(maxPosts, 300)), since || '']);
+  if (data.profile?.private) throw new ApiError(`TikTok account "@${username}" is private`, { status: 404 });
+  if (!data.posts?.length && !data.profile?.followers) throw new ApiError(`TikTok account "@${username}" returned no videos (misspelled, private, or yt-dlp needs an update: pip install -U yt-dlp)`, { status: 404 });
+  return { profile: data.profile, posts: data.posts || [] };
+}
+
 /* ---------- official Research API source ---------- */
 async function getToken(creds) {
   const cached = tokenCache.get(creds.clientKey);
@@ -116,10 +125,10 @@ async function fetchViaResearchApi(username, creds, { since, maxPosts }) {
 export default {
   id: 'tiktok',
   name: 'TikTok',
-  source: 'Apify or TikTok Research API',
+  source: 'Apify, Python (yt-dlp) or Research API',
   capabilities: { views: true, interactions: true, followers: true, shares: true, saves: true },
   credentialFields: [
-    { key: 'source', label: 'Data source', type: 'select', options: [['apify', 'Apify (clockworks/tiktok-scraper)'], ['research', 'TikTok Research API (official, approval required)']], secret: false },
+    { key: 'source', label: 'Data source', type: 'select', options: [['apify', 'Apify (clockworks/tiktok-scraper)'], ['python', 'Python (yt-dlp), free, no account'], ['research', 'TikTok Research API (official, approval required)']], secret: false },
     { key: 'apifyToken', label: 'Apify API token', secret: true, placeholder: 'apify_api_…', shared: 'apify', showWhen: { source: 'apify' } },
     { key: 'clientKey', label: 'Research API client key', secret: false, placeholder: 'aw…', showWhen: { source: 'research' } },
     { key: 'clientSecret', label: 'Research API client secret', secret: true, placeholder: '…', showWhen: { source: 'research' } },
@@ -127,6 +136,11 @@ export default {
   handlePlaceholder: '@username or profile URL',
 
   async test(creds) {
+    if (creds.source === 'python') {
+      const bin = await findPython();
+      const data = await runPythonJson(scriptPath('tiktok_fetch.py'), ['--selftest']).catch((e) => { throw e; });
+      return `Python found (${bin}) and yt-dlp ${data.ytdlp} is installed. TikTok videos will be fetched with yt-dlp.`;
+    }
     if ((creds.source || 'apify') === 'research') {
       await getToken(creds);
       return 'Research API credentials accepted. Your app needs approved access to the TikTok Research API.';
@@ -137,6 +151,8 @@ export default {
 
   async fetchAccount(handle, creds, opts) {
     const username = parseHandle(handle);
-    return (creds.source || 'apify') === 'research' ? fetchViaResearchApi(username, creds, opts) : fetchViaApify(username, creds, opts);
+    const source = creds.source || 'apify';
+    if (source === 'python') return fetchViaPython(username, opts);
+    return source === 'research' ? fetchViaResearchApi(username, creds, opts) : fetchViaApify(username, creds, opts);
   },
 };
