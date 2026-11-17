@@ -39,6 +39,7 @@ export function describeProviders(configured = new Set()) {
   return Object.values(providers).map((p) => ({
     id: p.id,
     name: p.name,
+    source: p.source || 'Official API',
     capabilities: p.capabilities,
     credentialFields: p.credentialFields,
     handlePlaceholder: p.handlePlaceholder,

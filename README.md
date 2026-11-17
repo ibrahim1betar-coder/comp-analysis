@@ -1,7 +1,8 @@
 # Competitor Pulse
 
-A self-hosted competitor analysis dashboard for social media. It connects to the official APIs of
-**YouTube, Instagram, Facebook, TikTok and X**, collects your competitors' posts, **interactions**
+A self-hosted competitor analysis dashboard for social media. It collects your competitors' posts from
+**YouTube** (your own Data API key), **Instagram, Facebook and TikTok** (through your Apify account) and
+**X** (API v2), and stores their **interactions**
 (likes, comments, shares, saves) and **video views** into a local database on a schedule, and turns
 them into a fast analytical website: leaderboard, share of voice, engagement rates, growth, platform
 and content-type breakdowns, posting-time analysis, top posts and plain-language insights.
@@ -37,17 +38,21 @@ Then open **Connect** in the sidebar:
 
 ## What each platform provides
 
-| Platform | How to connect | Followers | Interactions | Video views (competitors) |
+| Platform | How to connect | Followers | Interactions | Video views |
 |---|---|---|---|---|
-| YouTube | Data API v3 key (free, 5 min) | ✓ | likes, comments | ✓ |
-| Instagram | Meta app + long-lived token + your IG professional account ID (Business Discovery) | ✓ | likes, comments | ✗ not exposed by Meta |
-| Facebook | Meta app token with *Page Public Content Access* (app review) | ✓ | reactions, comments, shares | ✗ only for pages you own |
-| TikTok | Research API client key + secret (approval required) | ✓ | likes, comments, shares | ✓ |
+| YouTube | Your own Data API v3 key (free) | ✓ | likes, comments | ✓ |
+| Instagram | Apify token (actors `apify/instagram-scraper` + `apify/instagram-profile-scraper`) | ✓ | likes, comments | ✓ reels and videos |
+| Facebook | Apify token (actors `apify/facebook-posts-scraper` + `apify/facebook-pages-scraper`) | ✓ | reactions, comments, shares | when the actor reports them |
+| TikTok | Apify token (actor `clockworks/tiktok-scraper`) **or** the official TikTok Research API | ✓ | likes, comments, shares, saves | ✓ |
 | X | API v2 bearer token (Basic tier or higher) | ✓ | likes, replies, reposts + quotes, bookmarks | ✓ video views, else impressions |
 
-Where an API does not expose a metric, the dashboard shows **n/a** instead of a misleading zero.
-For any platform you cannot connect, the **CSV import** on the Connect page accepts post-level
-metrics (from a social listening tool or manual collection); imported posts appear in every chart.
+One Apify token covers Instagram, Facebook and TikTok: paste it once and the other two reuse it. Actor IDs are
+configurable per platform in case you prefer a different scraper. Where a metric is unavailable the dashboard
+shows **n/a** rather than a misleading zero, and the **CSV import** accepts post-level metrics from any other tool.
+
+Why Apify rather than Meta's and TikTok's own APIs: Meta's Graph API does not expose competitors' reel views
+and needs app review for public Pages, and TikTok has no public API for other accounts' videos. Fetching
+TikTok pages directly would require bypassing TikTok's request signing, which this app deliberately does not do.
 
 ## Configuration
 
@@ -103,6 +108,7 @@ server/
   analysis.js     SQL aggregations: overview, competitor detail, posts, export
   insights.js     Rule-based narrative insights
   providers/      One module per platform (youtube, instagram, facebook, tiktok, x)
+  apify.js        Apify client (run actor, dataset items, tolerant field mapping)
   db.js           node:sqlite schema, pragmas, re-entrant transactions
   credentials.js  Encrypted credential store
   seed.js         Demo data generator
@@ -120,7 +126,7 @@ test/             node:test suites: analysis, API, providers, CSV, crypto
 | `GET /api/analysis/posts?sort=views&dir=desc&page=1&type=reel&q=launch` | Paginated post list |
 | `GET /api/export/posts.csv?range=all` | CSV export |
 | `POST /api/competitors` · `POST /api/competitors/:id/accounts` · `DELETE …` | Manage what is tracked |
-| `PUT /api/credentials/:platform` · `POST /api/credentials/:platform/test` | Connect platforms |
+| `PUT /api/credentials/:platform` · `POST /api/credentials/:platform/test` | Connect platforms (fields per platform from `GET /api/meta`) |
 | `POST /api/sync` · `GET /api/sync/status` · `GET /api/sync/runs` | Collection control |
 | `POST /api/import` (text/csv) · `GET /api/import/template.csv` | Manual data |
 | `POST /api/login` · `GET /api/users` · `POST /api/users` · `PUT /api/me/password` | Accounts |

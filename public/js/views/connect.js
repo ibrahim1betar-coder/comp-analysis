@@ -17,41 +17,38 @@ const GUIDES = {
     data: 'Subscribers, video views, likes, comments, Shorts vs long-form detection.',
   },
   instagram: {
-    summary: 'Needs a Meta developer app and your own Instagram professional account. Interactions for any business/creator account.',
+    summary: 'Through Apify: public data for any account, including reel and video view counts. No Meta app needed.',
     steps: [
-      ['Switch your own Instagram account to Professional', 'Business or Creator, linked to a Facebook Page (Instagram → Settings → Account type and tools).'],
-      ['Create a Meta app', 'developers.facebook.com → My Apps → Create app → Business type. Add the "Instagram Graph API" product.'],
-      ['Generate a token', 'Tools → Graph API Explorer → select your app → add permissions instagram_basic, instagram_manage_insights, pages_show_list, pages_read_engagement, business_management → Generate token.'],
-      ['Make the token long-lived', 'Exchange it: GET /oauth/access_token?grant_type=fb_exchange_token&client_id=APP_ID&client_secret=APP_SECRET&fb_exchange_token=SHORT_TOKEN (valid 60 days). Use the Access Token Debugger to confirm.'],
-      ['Find your Instagram account ID', 'GET /me/accounts → take the Page id → GET /{page-id}?fields=instagram_business_account → copy the id.'],
-      ['Paste token and ID here, then add competitors by @username', 'Only business or creator accounts can be read through Business Discovery.'],
+      ['Create an Apify account', 'console.apify.com → Sign up. The free plan includes monthly credits; the Instagram scraper costs about $2.30 per 1,000 posts.'],
+      ['Copy your API token', 'Apify Console → Settings → API & Integrations → Personal API tokens → copy (or create) a token.'],
+      ['Paste the token here and save', 'The dashboard verifies it against your Apify account. The same token is reused for Facebook and TikTok automatically.'],
+      ['Add competitor accounts', 'Use the @username or profile URL of any public Instagram account. Private accounts cannot be read.'],
+      ['Optional: change the actor', 'Defaults are apify/instagram-scraper (posts) and apify/instagram-profile-scraper (followers). Any actor that returns the same fields works.'],
     ],
-    note: 'Meta does not expose play counts for accounts you do not own. Likes and comments are complete; reels are marked so you can still compare video content. Add view counts via CSV import if you collect them elsewhere.',
-    data: 'Followers, posts, likes, comments, media type (reel / image / carousel).',
+    note: 'Each sync runs the actor once per account (about 10-30 seconds). Views are reported for reels and videos; image posts have no view count.',
+    data: 'Followers, posts count, likes, comments, reel/video views, media type (reel / video / image / carousel).',
   },
   facebook: {
-    summary: 'Needs a Meta app with "Page Public Content Access" (app review) to read Pages you do not manage.',
+    summary: 'Through Apify: public Page posts with reactions, comments, shares and followers. No Meta app review needed.',
     steps: [
-      ['Create or reuse a Meta app', 'developers.facebook.com → My Apps → Create app → Business.'],
-      ['Request Page Public Content Access', 'App Dashboard → App Review → Permissions and Features → request "Page Public Content Access" and "Page Public Metadata Access". Describe your competitive benchmarking use case.'],
-      ['Generate a long-lived token', 'Graph API Explorer → permissions pages_read_engagement, pages_show_list → Generate → exchange for a long-lived token (same call as Instagram, step 4).'],
-      ['Paste the token here', 'Until app review is approved, only Pages you manage can be read.'],
-      ['Add competitor Pages', 'Use the Page username (facebook.com/username), numeric ID, or URL.'],
+      ['Create an Apify account and token', 'Same token as Instagram: console.apify.com → Settings → API & Integrations → Personal API tokens.'],
+      ['Paste the token here and save', 'Already saved for Instagram? Just click Save & test, the shared token is used.'],
+      ['Add competitor Pages', 'Use the Page username (facebook.com/username), the numeric Page ID or the full URL. Only public Pages, not personal profiles or groups.'],
+      ['Optional: change the actors', 'Defaults are apify/facebook-posts-scraper (posts) and apify/facebook-pages-scraper (followers).'],
     ],
-    note: 'Video views are only available for Pages you own. Reactions, comments and shares are collected for every public Page.',
-    data: 'Followers, posts, reactions, comments, shares, attachment type.',
+    note: 'Reactions are counted as likes. Video view counts are stored when the actor reports them; otherwise the post shows n/a for views.',
+    data: 'Followers, Page likes, posts, reactions, comments, shares, media type.',
   },
   tiktok: {
-    summary: 'Official TikTok Research API (approval required). Views, likes, comments and shares for any public account.',
+    summary: 'Through Apify (default, any public account, no approval) or the official TikTok Research API.',
     steps: [
-      ['Apply for the Research API', 'developers.tiktok.com → Research API → apply. Available to academic and non-profit researchers in the US and EU; approval takes a few weeks.'],
-      ['Create an app with Research API access', 'In the developer portal, add the "Research API" product to your app.'],
-      ['Copy the client key and client secret', 'App details → Credentials.'],
-      ['Paste both here', 'The dashboard requests a client-credentials token and refreshes it automatically.'],
-      ['Add competitor @usernames', 'Posts are queried in 30-day windows back to the look-back period.'],
+      ['Choose the data source', 'Apify needs only your Apify token and works for any public account. The Research API is TikTok\'s official route but requires an approved research application.'],
+      ['Apify: paste the token and save', 'The same token as Instagram and Facebook. Default actor: clockworks/tiktok-scraper (about $0.50-4 per 1,000 videos depending on the actor\'s pricing).'],
+      ['Research API: paste client key and secret', 'developers.tiktok.com → Research API → apply → add the Research API product to your app → copy the credentials.'],
+      ['Add competitor accounts', 'Use the @username or profile URL.'],
     ],
-    note: 'If you do not qualify for the Research API, export metrics from a listening tool (or TikTok Creator Center for your own account) and use the CSV import below. Imported posts show up in every chart exactly like API data.',
-    data: 'Followers, total likes, video views, likes, comments, shares.',
+    note: 'TikTok does not offer a public API for other accounts\' videos. Fetching them straight from tiktok.com requires bypassing TikTok\'s anti-bot request signing, which this app deliberately does not do; Apify runs its own infrastructure for that.',
+    data: 'Followers, total likes, video count, views, likes, comments, shares, saves per video.',
   },
   x: {
     summary: 'X API v2 with an app bearer token. Reading other users\' posts requires the Basic tier (paid) or higher.',
@@ -77,7 +74,7 @@ export function create(ctx) {
 
   el.append(
     card('How it works', 'Four steps from zero to a live competitor dashboard', h('div', { class: 'steps' },
-      h('div', { class: 'step' }, h('div', null, h('strong', null, 'Connect platforms'), h('p', null, 'Add API credentials below for each network you want to track. Each one is tested on save and stored encrypted.'))),
+      h('div', { class: 'step' }, h('div', null, h('strong', null, 'Connect platforms'), h('p', null, 'YouTube uses your own Google API key; Instagram, Facebook and TikTok run through your Apify account (one token for all three). Each connection is tested on save and stored encrypted.'))),
       h('div', { class: 'step' }, h('div', null, h('strong', null, 'Add competitors'), h('p', null, 'Create a competitor and attach its @handles. Mark one as your own brand to benchmark against.'))),
       h('div', { class: 'step' }, h('div', null, h('strong', null, 'Collect'), h('p', null, `Posts, views, interactions and follower counts are pulled into the local database. The scheduler re-collects every ${ctx.meta.sync.intervalMinutes} minutes.`))),
       h('div', { class: 'step' }, h('div', null, h('strong', null, 'Analyse'), h('p', null, 'The Overview, Competitors and Posts pages compute share of voice, engagement rates, growth, content-type and timing analysis from the stored data, instantly.'))),
@@ -186,11 +183,23 @@ export function create(ctx) {
       } catch (err) { replace(msg, h('div', { class: 'status-msg bad' }, err.message)); }
       finally { if (btn) btn.disabled = false; }
     } });
+    const rows = {};
+    const refresh = () => {
+      for (const f of p.credentialFields) if (f.showWhen) rows[f.key].hidden = !Object.entries(f.showWhen).every(([k, v]) => (inputs[k]?.value || 'apify') === v);
+    };
     for (const f of p.credentialFields) {
-      const input = h('input', { class: 'input', type: f.secret ? 'password' : 'text', placeholder: f.placeholder || '', value: saved?.fields?.[f.key] || '', autocomplete: 'off', spellcheck: 'false' });
+      let input;
+      if (f.type === 'select') {
+        input = h('select', { class: 'select', onChange: refresh }, f.options.map(([v, l]) => h('option', { value: v, selected: (saved?.fields?.[f.key] || f.options[0][0]) === v ? true : null }, l)));
+      } else {
+        const sharedAvailable = f.shared === 'apify' && ctx.meta.sharedApifyToken && !saved?.fields?.[f.key];
+        input = h('input', { class: 'input', type: f.secret ? 'password' : 'text', placeholder: sharedAvailable ? 'Using the Apify token saved for another platform' : f.placeholder || '', value: saved?.fields?.[f.key] || '', autocomplete: 'off', spellcheck: 'false' });
+      }
       inputs[f.key] = input;
-      form.append(h('label', { class: 'field' }, `${f.label}${f.optional ? ' (optional)' : ''}`, input, f.hint ? h('span', { class: 'field-hint' }, f.hint) : null));
+      rows[f.key] = h('label', { class: 'field' }, `${f.label}${f.optional ? ' (optional)' : ''}`, input, f.hint ? h('span', { class: 'field-hint' }, f.hint) : null);
+      form.append(rows[f.key]);
     }
+    refresh();
     form.append(h('div', { class: 'actions' },
       h('button', { class: 'btn primary', type: 'submit' }, connected ? 'Update & test' : 'Save & test'),
       connected ? h('button', { class: 'btn', type: 'button', onClick: async () => { replace(msg, h('div', { class: 'status-msg' }, 'Testing…')); const r = await post(`/api/credentials/${p.id}/test`); replace(msg, h('div', { class: `status-msg ${r.ok ? 'ok' : 'bad'}` }, r.message)); } }, 'Test connection') : null,
@@ -202,7 +211,7 @@ export function create(ctx) {
     return h('details', { class: 'card platform-card', open: !connected && p.id === 'youtube' ? true : null },
       h('summary', null,
         icon(p.id, 'platform-icon'),
-        h('div', { class: 'title' }, h('strong', null, p.name), h('span', null, g.summary)),
+        h('div', { class: 'title' }, h('strong', null, p.name, h('span', { class: 'badge', style: { marginLeft: '8px', fontWeight: 500 } }, p.source)), h('span', null, g.summary)),
         h('span', { class: `badge ${connected ? 'ok' : 'warn'}` }, icon(connected ? 'check' : 'lock'), connected ? `Connected · ${tracked} account${tracked === 1 ? '' : 's'}` : 'Not connected'),
         icon('chevron', 'chev'),
       ),

@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { db, stmt, transaction, nowIso, today, getSetting, setSetting } from '../db.js';
 import { config } from '../config.js';
 import { providers, PLATFORMS, getProvider, normaliseHandle, describeProviders } from '../providers/index.js';
-import { getCredentials, saveCredentials, deleteCredentials, configuredPlatforms, describeCredentials } from '../credentials.js';
+import { getCredentials, saveCredentials, deleteCredentials, configuredPlatforms, describeCredentials, getShared } from '../credentials.js';
 import { syncAll, syncAccount, syncState, storeAccountData } from '../collector.js';
 import * as analysis from '../analysis.js';
 import { overviewInsights, competitorInsights } from '../insights.js';
@@ -73,6 +73,7 @@ export default async function routes(app) {
   /* ---- meta ---- */
   app.get('/api/meta', async (req) => ({
     providers: describeProviders(configuredPlatforms()),
+    sharedApifyToken: Boolean(getShared('apify')),
     sync: { intervalMinutes: config.syncIntervalMinutes, lookbackDays: config.lookbackDays, postsPerAccount: config.postsPerAccount, concurrency: config.syncConcurrency },
     stats: analysis.stats(),
     importTemplate: IMPORT_TEMPLATE,

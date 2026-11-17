@@ -28,7 +28,7 @@ export function create(ctx) {
   const sovBox = h('div');
   slots.charts.append(
     card('Interactions over time', 'Likes, comments, shares and saves on posts published in each period', h('div', { class: 'chart-box' }, interactionsCanvas)),
-    card('Video views over time', 'Platforms that expose competitors\' view counts: YouTube, TikTok, X', h('div', { class: 'chart-box' }, viewsCanvas)),
+    card('Video views over time', 'Views reported by each platform for video posts (reels, TikToks, YouTube videos, X videos)', h('div', { class: 'chart-box' }, viewsCanvas)),
   );
   slots.mix.append(
     card('Share of voice', 'Share of all interactions in the period', sovBox),

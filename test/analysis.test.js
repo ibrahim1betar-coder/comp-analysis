@@ -66,8 +66,8 @@ test('overview aggregates interactions and views per competitor and platform', (
   assert.ok(Math.abs(beta.shareOfVoice - (2000 / 2385) * 100) < 1e-9);
   assert.equal(o.competitors[0].name, 'Beta'); // sorted by interactions
   const ig = o.platforms.find((p) => p.platform === 'instagram');
-  assert.equal(ig.views, null);
-  assert.equal(ig.capabilities.views, false);
+  assert.equal(ig.views, null); // the only IG post has no view count, so the platform total stays null
+  assert.equal(ig.postsWithViews, 0);
   assert.equal(o.series.keys.length, 30);
   assert.equal(o.series.total.interactions.reduce((x, y) => x + y, 0), 2385);
   assert.equal(o.topPosts[0].id, 'tiktok:t1');
@@ -120,5 +120,5 @@ test('insights name the leaders and flag missing view data', () => {
   const titles = overviewInsights(o).map((i) => i.title);
   assert.ok(titles.includes('Beta leads on interactions'));
   assert.ok(titles.includes('Beta wins on video views'));
-  assert.ok(titles.includes('View counts not available everywhere'));
+  assert.ok(!titles.includes('View counts not available everywhere')); // every tracked platform can report views now
 });
