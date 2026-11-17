@@ -155,7 +155,9 @@ function series(f, groupExpr) {
   return { bucket: f.bucket, keys, total, groups: [...groups.values()] };
 }
 
+// engagement = interactions per 100 views (NULL when the post has no view count)
 const POST_SELECT = `p.id, p.account_id, p.published_at, p.type, p.url, p.caption, p.thumbnail_url, p.views, p.likes, p.comments, p.shares, p.saves, p.interactions,
+  CASE WHEN p.views > 0 THEN 100.0 * p.interactions / p.views END AS engagement,
   a.platform, a.handle, a.display_name, a.competitor_id, c.name AS competitor, c.color_slot`;
 
 function topPosts(f, { by = 'interactions', limit = 10 } = {}) {
@@ -313,7 +315,7 @@ export function competitorDetail(id, query) {
   });
 }
 
-const SORTABLE = { published_at: 'p.published_at', views: 'p.views', interactions: 'p.interactions', likes: 'p.likes', comments: 'p.comments', shares: 'p.shares' };
+const SORTABLE = { published_at: 'p.published_at', views: 'p.views', interactions: 'p.interactions', likes: 'p.likes', comments: 'p.comments', shares: 'p.shares', engagement: 'engagement' };
 export function listPosts(query) {
   const f = resolveFilters(query);
   const w = where(f);

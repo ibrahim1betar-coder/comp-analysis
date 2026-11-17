@@ -82,6 +82,7 @@ export function postsTable(rows, { showCompetitor = true, sort, onSort } = {}) {
       th('comments', 'Comments', 'num'),
       th('shares', 'Shares', 'num'),
       th('interactions', 'Interactions', 'num'),
+      th('engagement', 'Eng. rate', 'num'),
     )),
     h('tbody', null, rows.map((p) => h('tr', null,
       h('td', null, h('div', { class: 'post-cell' },
@@ -99,6 +100,7 @@ export function postsTable(rows, { showCompetitor = true, sort, onSort } = {}) {
       h('td', { class: 'num' }, compact(p.comments)),
       h('td', { class: 'num' }, compact(p.shares)),
       h('td', { class: 'num' }, h('strong', null, compact(p.interactions))),
+      h('td', { class: 'num', title: 'Interactions per 100 views' }, p.engagement === null || p.engagement === undefined ? h('span', { class: 'muted' }, '—') : pct(p.engagement, 1)),
     ))),
   ));
 }

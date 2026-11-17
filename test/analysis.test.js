@@ -101,6 +101,8 @@ test('listPosts sorts, paginates, filters by type and searches captions', () => 
   const byViews = listPosts({ range: '30d', sort: 'views', dir: 'desc' });
   assert.equal(byViews.total, 4);
   assert.equal(byViews.rows[0].id, 'tiktok:t1');
+  assert.ok(Math.abs(byViews.rows[0].engagement - 10) < 1e-9); // 2000 interactions / 20000 views
+  assert.equal(listPosts({ range: '30d', sort: 'engagement' }).rows[0].id, 'youtube:v1'); // 110/1000 = 11%
   assert.equal(byViews.rows[byViews.rows.length - 1].views, null); // NULLS LAST
   assert.equal(listPosts({ range: '30d', type: 'short' }).total, 1);
   assert.equal(listPosts({ range: 'all' }).total, 5);
