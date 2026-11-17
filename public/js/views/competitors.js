@@ -1,6 +1,6 @@
 import { h, replace, icon } from '../dom.js';
 import { get, post, put, del } from '../api.js';
-import { compact, int, pct, relTime, title, WEEKDAYS } from '../format.js';
+import { compact, int, pct, relTime, title, WEEKDAYS, at } from '../format.js';
 import { lineChart, barChart, stackedBarChart, slotColor, destroyAll } from '../charts.js';
 import { statTile, insightCards, card, postsTable, platformBadge, statusBadge, empty, PLATFORM_NAMES } from '../components.js';
 
@@ -88,15 +88,15 @@ export function createList(ctx) {
   function accountRow(a) {
     return h('div', { class: 'account-row' },
       platformBadge(a.platform, { label: false }),
-      h('span', { class: 'handle', title: a.last_error || '' }, a.profile_url ? h('a', { href: a.profile_url, target: '_blank', rel: 'noopener noreferrer' }, `@${a.handle}`) : `@${a.handle}`),
+      h('span', { class: 'handle', title: a.last_error || '' }, a.profile_url ? h('a', { href: a.profile_url, target: '_blank', rel: 'noopener noreferrer' }, at(a.handle)) : at(a.handle)),
       statusBadge(a.status, a.last_error),
       h('span', { class: 'muted small nowrap' }, a.last_synced_at ? relTime(a.last_synced_at) : ''),
       a.status !== 'demo' && a.status !== 'manual' ? h('button', { class: 'btn ghost sm', title: 'Sync now', onClick: async (e) => {
         const btn = e.currentTarget; btn.disabled = true;
-        try { const r = await post(`/api/accounts/${a.id}/sync`); ctx.toast(r.ok ? `Synced @${a.handle}: ${r.posts} posts` : r.error, r.ok ? 'ok' : 'bad'); await update(); } finally { btn.disabled = false; }
+        try { const r = await post(`/api/accounts/${a.id}/sync`); ctx.toast(r.ok ? `Synced ${at(a.handle)}: ${r.posts} posts` : r.error, r.ok ? 'ok' : 'bad'); await update(); } finally { btn.disabled = false; }
       } }, icon('sync')) : null,
       h('button', { class: 'btn ghost sm danger', title: 'Remove account', onClick: async () => {
-        if (!confirm(`Remove @${a.handle} (${PLATFORM_NAMES[a.platform]}) and its posts?`)) return;
+        if (!confirm(`Remove ${at(a.handle)} (${PLATFORM_NAMES[a.platform]}) and its posts?`)) return;
         try { await del(`/api/accounts/${a.id}`); await update(); } catch (err) { ctx.toast(err.message, 'bad'); }
       } }, icon('trash')),
     );
@@ -154,7 +154,7 @@ export function createDetail(ctx, id) {
     ctx.setTitle(c.name, `${d.accounts.length} accounts · ${int(t.posts)} posts in the last ${d.filters.days} days`);
     replace(head, h('div', { class: 'detail-head' },
       h('a', { class: 'btn ghost sm', href: '#/competitors' }, '← All competitors'),
-      h('div', { class: 'account-chips' }, d.accounts.map((a) => h('a', { class: 'chip', href: a.profileUrl || '#', target: a.profileUrl ? '_blank' : null, rel: 'noopener noreferrer' }, icon(a.platform), `@${a.handle}`))),
+      h('div', { class: 'account-chips' }, d.accounts.map((a) => h('a', { class: 'chip', href: a.profileUrl || '#', target: a.profileUrl ? '_blank' : null, rel: 'noopener noreferrer' }, icon(a.platform), at(a.handle)))),
     ));
     replace(insights, insightCards(d.insights));
     const color = slotColor(c.slot);
@@ -192,7 +192,7 @@ export function createDetail(ctx, id) {
     return h('div', { class: 'table-wrap' }, h('table', null,
       h('thead', null, h('tr', null, h('th', null, 'Account'), h('th', null, 'Status'), h('th', { class: 'num' }, 'Followers'), h('th', { class: 'num' }, 'Growth'), h('th', { class: 'num' }, 'Posts'), h('th', { class: 'num' }, 'Views'), h('th', { class: 'num' }, 'Avg views'), h('th', { class: 'num' }, 'Interactions'), h('th', { class: 'num' }, 'Per post'), h('th', { class: 'num' }, 'Eng. rate'), h('th', null, ''))),
       h('tbody', null, d.accounts.map((a) => h('tr', null,
-        h('td', null, h('div', { class: 'post-cell' }, a.avatarUrl ? h('img', { class: 'thumb', src: a.avatarUrl, alt: '', style: { width: '32px', height: '32px', borderRadius: '50%' }, referrerpolicy: 'no-referrer' }) : platformBadge(a.platform, { label: false }), h('div', null, h('div', null, a.profileUrl ? h('a', { href: a.profileUrl, target: '_blank', rel: 'noopener noreferrer' }, `@${a.handle}`) : `@${a.handle}`), h('div', { class: 'meta' }, a.platformName)))),
+        h('td', null, h('div', { class: 'post-cell' }, a.avatarUrl ? h('img', { class: 'thumb', src: a.avatarUrl, alt: '', style: { width: '32px', height: '32px', borderRadius: '50%' }, referrerpolicy: 'no-referrer' }) : platformBadge(a.platform, { label: false }), h('div', null, h('div', null, a.profileUrl ? h('a', { href: a.profileUrl, target: '_blank', rel: 'noopener noreferrer' }, at(a.handle)) : at(a.handle)), h('div', { class: 'meta' }, a.platformName)))),
         h('td', null, statusBadge(a.status, a.lastError), a.lastError ? h('div', { class: 'small muted', style: { maxWidth: '240px' } }, a.lastError) : null),
         h('td', { class: 'num' }, compact(a.followers)),
         h('td', { class: 'num' }, a.followerGrowth === null ? '—' : h('span', { class: `delta ${a.followerGrowth >= 0 ? 'up' : 'down'}` }, (a.followerGrowth >= 0 ? '+' : '') + compact(a.followerGrowth))),

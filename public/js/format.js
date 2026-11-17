@@ -42,3 +42,4 @@ export function relTime(iso) {
 }
 export const title = (s) => (s ? s[0].toUpperCase() + s.slice(1) : '');
 export const truncate = (s, n = 90) => (s && s.length > n ? s.slice(0, n - 1) + '…' : s || '');
+export const at = (handle) => (handle && String(handle).startsWith('@') ? handle : `@${handle || ''}`);

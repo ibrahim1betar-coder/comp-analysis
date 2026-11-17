@@ -6,7 +6,8 @@ import instagram, { mapPost as igPost } from '../server/providers/instagram.js';
 import facebook, { mapPost as fbPost } from '../server/providers/facebook.js';
 import tiktok, { mapApifyPost, mapApifyProfile } from '../server/providers/tiktok.js';
 import { pick, num, when } from '../server/apify.js';
-import { saveCredentials, getCredentials, configuredPlatforms } from '../server/credentials.js';
+import { saveCredentials, getCredentials, configuredPlatforms, saveApifyToken, deleteApifyToken } from '../server/credentials.js';
+import { computeSince } from '../server/collector.js';
 
 const fx = JSON.parse(readFileSync(new URL('./fixtures/apify-samples.json', import.meta.url), 'utf8'));
 
@@ -94,4 +95,28 @@ test('the Apify token is shared across Instagram, Facebook and TikTok', () => {
   // Saving Facebook with an empty token keeps using the shared one.
   saveCredentials('facebook', { apifyToken: '' });
   assert.equal(getCredentials('facebook').apifyToken, 'apify_api_shared');
+});
+
+test('one Apify token links Instagram, Facebook and TikTok; Research API TikTok is left alone', () => {
+  deleteApifyToken();
+  saveCredentials('tiktok', { source: 'research', clientKey: 'k', clientSecret: 's' });
+  saveApifyToken('apify_api_one');
+  assert.equal(getCredentials('instagram').apifyToken, 'apify_api_one');
+  assert.equal(getCredentials('facebook').apifyToken, 'apify_api_one');
+  assert.equal(getCredentials('tiktok').source, 'research');
+  assert.throws(() => { deleteApifyToken(); saveApifyToken(''); }, /required/);
+  saveApifyToken('apify_api_two');
+  assert.equal(getCredentials('facebook').apifyToken, 'apify_api_two');
+  deleteApifyToken();
+  assert.equal(getCredentials('facebook'), null);
+  assert.equal(getCredentials('tiktok').source, 'research'); // kept
+});
+
+test('first sync has no date floor; later syncs re-read 14 days within the look-back', () => {
+  const now = Date.parse('2026-11-17T00:00:00Z');
+  assert.equal(computeSince({ last_synced_at: null, has_posts: 0 }, { now }), null);
+  assert.equal(computeSince({ last_synced_at: '2026-11-10T00:00:00Z', has_posts: 0 }, { now }), null); // synced but got nothing yet
+  assert.equal(computeSince({ last_synced_at: '2026-11-10T00:00:00Z', has_posts: 1 }, { full: true, now }), null);
+  assert.equal(computeSince({ last_synced_at: '2026-11-10T00:00:00Z', has_posts: 1 }, { now }), '2026-10-27T00:00:00.000Z');
+  assert.equal(computeSince({ last_synced_at: '2020-01-01T00:00:00Z', has_posts: 1 }, { now }), '2026-08-19T00:00:00.000Z'); // capped by LOOKBACK_DAYS=90
 });

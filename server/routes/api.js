@@ -2,7 +2,8 @@ import { createHash } from 'node:crypto';
 import { db, stmt, transaction, nowIso, today, getSetting, setSetting } from '../db.js';
 import { config } from '../config.js';
 import { providers, PLATFORMS, getProvider, normaliseHandle, describeProviders } from '../providers/index.js';
-import { getCredentials, saveCredentials, deleteCredentials, configuredPlatforms, describeCredentials, getShared } from '../credentials.js';
+import { getCredentials, saveCredentials, deleteCredentials, configuredPlatforms, describeCredentials, getShared, saveApifyToken, deleteApifyToken } from '../credentials.js';
+import { whoAmI } from '../apify.js';
 import { syncAll, syncAccount, syncState, storeAccountData } from '../collector.js';
 import * as analysis from '../analysis.js';
 import { overviewInsights, competitorInsights } from '../insights.js';
@@ -161,6 +162,18 @@ export default async function routes(app) {
 
   /* ---- credentials ---- */
   app.get('/api/credentials', async () => describeCredentials());
+  /** One Apify token links Instagram, Facebook and TikTok. */
+  app.put('/api/credentials/apify', async (req, reply) => {
+    try {
+      saveApifyToken(req.body?.apifyToken);
+      let test;
+      try { const me = await whoAmI(getShared('apify')); test = { ok: true, message: `Apify token works (account: ${me.username || me.id}). Instagram, Facebook and TikTok are now linked.` }; }
+      catch (e) { test = { ok: false, message: `Apify rejected the token: ${e.message}` }; }
+      analysis.invalidate();
+      return { ok: true, test };
+    } catch (e) { return bad(reply, e.message); }
+  });
+  app.delete('/api/credentials/apify', async () => { deleteApifyToken(); return { ok: true }; });
   app.put('/api/credentials/:platform', async (req, reply) => {
     const { platform } = req.params;
     if (!PLATFORMS.includes(platform)) return bad(reply, 'Unknown platform', 404);

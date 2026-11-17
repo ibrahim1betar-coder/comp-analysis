@@ -43,16 +43,12 @@ export default {
   name: 'Instagram',
   source: 'Apify',
   capabilities: { views: true, interactions: true, followers: true, shares: false, saves: false },
-  credentialFields: [
-    { key: 'apifyToken', label: 'Apify API token', secret: true, placeholder: 'apify_api_…', shared: 'apify' },
-    { key: 'actor', label: 'Apify actor', secret: false, placeholder: 'apify/instagram-scraper', optional: true, hint: 'Leave empty for apify/instagram-scraper. Any actor that returns post items with likesCount / commentsCount / videoPlayCount works.' },
-    { key: 'profileActor', label: 'Profile actor', secret: false, placeholder: 'apify/instagram-profile-scraper', optional: true, hint: 'Used for follower counts. Leave empty for the default.' },
-  ],
+  credentialFields: [{ key: 'apifyToken', label: 'Apify API token', secret: true, placeholder: 'apify_api_…', shared: 'apify' }],
   handlePlaceholder: '@username or profile URL (any public account)',
 
   async test(creds) {
     const me = await whoAmI(creds.apifyToken);
-    return `Apify token works (account: ${me.username || me.id}). Instagram posts and reels views will be collected with ${creds.actor || 'apify/instagram-scraper'}.`;
+    return `Apify token works (account: ${me.username || me.id}). Instagram posts and reels views will be collected with ${process.env.APIFY_INSTAGRAM_ACTOR || 'apify/instagram-scraper'}.`;
   },
 
   async fetchAccount(handle, creds, { since, maxPosts }) {
@@ -61,7 +57,7 @@ export default {
     const limit = Math.min(maxPosts, 200);
 
     // 1) Posts (one actor run). resultsType "posts" walks the profile feed newest-first.
-    const items = await runActor(token, creds.actor || 'apify/instagram-scraper', {
+    const items = await runActor(token, process.env.APIFY_INSTAGRAM_ACTOR || 'apify/instagram-scraper', {
       directUrls: [`https://www.instagram.com/${username}/`],
       resultsType: 'posts',
       resultsLimit: limit,
@@ -81,7 +77,7 @@ export default {
     // 2) Profile (followers). A separate small actor run; failures here do not lose the posts.
     let profile = { externalId: username, displayName: username, profileUrl: `https://www.instagram.com/${username}/`, avatarUrl: null, followers: null, following: null, postsCount: null, totalViews: null, totalLikes: null };
     try {
-      const [pr] = await runActor(token, creds.profileActor || 'apify/instagram-profile-scraper', { usernames: [username] }, { timeoutSecs: 120 });
+      const [pr] = await runActor(token, process.env.APIFY_INSTAGRAM_PROFILE_ACTOR || 'apify/instagram-profile-scraper', { usernames: [username] }, { timeoutSecs: 120 });
       if (pr) profile = {
         externalId: String(pick(pr, 'id', 'pk') || username),
         displayName: pick(pr, 'fullName', 'full_name', 'name') || username,

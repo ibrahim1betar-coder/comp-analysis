@@ -46,8 +46,9 @@ Then open **Connect** in the sidebar:
 | TikTok | Apify token (actor `clockworks/tiktok-scraper`) **or** the official TikTok Research API | ✓ | likes, comments, shares, saves | ✓ |
 | X | API v2 bearer token (Basic tier or higher) | ✓ | likes, replies, reposts + quotes, bookmarks | ✓ video views, else impressions |
 
-One Apify token covers Instagram, Facebook and TikTok: paste it once and the other two reuse it. Actor IDs are
-configurable per platform in case you prefer a different scraper. Where a metric is unavailable the dashboard
+One Apify token covers Instagram, Facebook and TikTok: paste it once in the Apify card on the Connect page.
+Advanced: override the actors with `APIFY_INSTAGRAM_ACTOR`, `APIFY_INSTAGRAM_PROFILE_ACTOR`, `APIFY_FACEBOOK_ACTOR`,
+`APIFY_FACEBOOK_PAGE_ACTOR`, `APIFY_TIKTOK_ACTOR` in `.env`. Where a metric is unavailable the dashboard
 shows **n/a** rather than a misleading zero, and the **CSV import** accepts post-level metrics from any other tool.
 
 Why Apify rather than Meta's and TikTok's own APIs: Meta's Graph API does not expose competitors' reel views
@@ -66,7 +67,7 @@ Copy `.env.example` to `.env`:
 | `APP_SECRET` | auto-generated in `data/.secret` | Key used to encrypt API credentials at rest |
 | `SYNC_INTERVAL_MINUTES` | `360` | Background collection interval (`0` disables the scheduler) |
 | `SYNC_CONCURRENCY` | `3` | Accounts collected in parallel (interleaved across platforms) |
-| `LOOKBACK_DAYS` | `90` | History collected on the first sync and on a full re-sync |
+| `LOOKBACK_DAYS` | `90` | How far back incremental syncs refresh. The first sync and a full re-sync fetch the newest `POSTS_PER_ACCOUNT` posts regardless of age |
 | `POSTS_PER_ACCOUNT` | `300` | Cap per account per sync |
 | `DB_PATH` | `./data/competitor-pulse.db` | SQLite file |
 
@@ -81,7 +82,7 @@ Copy `.env.example` to `.env`:
 * **Δ vs previous** = change against the period of equal length immediately before the selected range.
 * **Follower growth** = newest daily follower snapshot minus the snapshot at the start of the period.
 * **Posting days / hours** use the post's published time (UTC).
-* Each sync re-reads the last 14 days of posts so counters keep updating; a full re-sync refreshes the whole look-back window.
+* The first sync fetches an account's newest posts regardless of age, so rarely-posting accounts still show up. Later syncs re-read the last 14 days (counters keep updating) plus anything new; a full re-sync fetches everything again.
 
 ## Performance design
 

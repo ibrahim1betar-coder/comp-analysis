@@ -49,7 +49,7 @@ export function mapApifyProfile(items, username) {
 }
 
 async function fetchViaApify(username, creds, { since, maxPosts }) {
-  const items = await runActor(creds.apifyToken, creds.actor || 'clockworks/tiktok-scraper', {
+  const items = await runActor(creds.apifyToken, process.env.APIFY_TIKTOK_ACTOR || 'clockworks/tiktok-scraper', {
     profiles: [username],
     resultsPerPage: Math.min(maxPosts, 200),
     oldestPostDate: since ? since.slice(0, 10) : undefined,
@@ -121,7 +121,6 @@ export default {
   credentialFields: [
     { key: 'source', label: 'Data source', type: 'select', options: [['apify', 'Apify (clockworks/tiktok-scraper)'], ['research', 'TikTok Research API (official, approval required)']], secret: false },
     { key: 'apifyToken', label: 'Apify API token', secret: true, placeholder: 'apify_api_…', shared: 'apify', showWhen: { source: 'apify' } },
-    { key: 'actor', label: 'Apify actor', secret: false, placeholder: 'clockworks/tiktok-scraper', optional: true, showWhen: { source: 'apify' }, hint: 'Leave empty for the default actor.' },
     { key: 'clientKey', label: 'Research API client key', secret: false, placeholder: 'aw…', showWhen: { source: 'research' } },
     { key: 'clientSecret', label: 'Research API client secret', secret: true, placeholder: '…', showWhen: { source: 'research' } },
   ],
@@ -133,7 +132,7 @@ export default {
       return 'Research API credentials accepted. Your app needs approved access to the TikTok Research API.';
     }
     const me = await whoAmI(creds.apifyToken);
-    return `Apify token works (account: ${me.username || me.id}). TikTok videos, views, likes, comments, shares and saves will be collected with ${creds.actor || 'clockworks/tiktok-scraper'}.`;
+    return `Apify token works (account: ${me.username || me.id}). TikTok videos, views, likes, comments, shares and saves will be collected with ${process.env.APIFY_TIKTOK_ACTOR || 'clockworks/tiktok-scraper'}.`;
   },
 
   async fetchAccount(handle, creds, opts) {

@@ -1,6 +1,6 @@
 import { h, replace, icon } from '../dom.js';
 import { get, post, put, del, api } from '../api.js';
-import { int, relTime, longDate } from '../format.js';
+import { int, relTime, longDate, at } from '../format.js';
 import { card, platformBadge, empty, PLATFORM_NAMES } from '../components.js';
 
 const GUIDES = {
@@ -21,9 +21,8 @@ const GUIDES = {
     steps: [
       ['Create an Apify account', 'console.apify.com → Sign up. The free plan includes monthly credits; the Instagram scraper costs about $2.30 per 1,000 posts.'],
       ['Copy your API token', 'Apify Console → Settings → API & Integrations → Personal API tokens → copy (or create) a token.'],
-      ['Paste the token here and save', 'The dashboard verifies it against your Apify account. The same token is reused for Facebook and TikTok automatically.'],
+      ['Paste the token in the Apify card above', 'It is verified against your Apify account and links Instagram, Facebook and TikTok in one go.'],
       ['Add competitor accounts', 'Use the @username or profile URL of any public Instagram account. Private accounts cannot be read.'],
-      ['Optional: change the actor', 'Defaults are apify/instagram-scraper (posts) and apify/instagram-profile-scraper (followers). Any actor that returns the same fields works.'],
     ],
     note: 'Each sync runs the actor once per account (about 10-30 seconds). Views are reported for reels and videos; image posts have no view count.',
     data: 'Followers, posts count, likes, comments, reel/video views, media type (reel / video / image / carousel).',
@@ -32,9 +31,8 @@ const GUIDES = {
     summary: 'Through Apify: public Page posts with reactions, comments, shares and followers. No Meta app review needed.',
     steps: [
       ['Create an Apify account and token', 'Same token as Instagram: console.apify.com → Settings → API & Integrations → Personal API tokens.'],
-      ['Paste the token here and save', 'Already saved for Instagram? Just click Save & test, the shared token is used.'],
+      ['Link Apify above', 'Once the Apify token is saved, Facebook is linked automatically.'],
       ['Add competitor Pages', 'Use the Page username (facebook.com/username), the numeric Page ID or the full URL. Only public Pages, not personal profiles or groups.'],
-      ['Optional: change the actors', 'Defaults are apify/facebook-posts-scraper (posts) and apify/facebook-pages-scraper (followers).'],
     ],
     note: 'Reactions are counted as likes. Video view counts are stored when the actor reports them; otherwise the post shows n/a for views.',
     data: 'Followers, Page likes, posts, reactions, comments, shares, media type.',
@@ -43,7 +41,7 @@ const GUIDES = {
     summary: 'Through Apify (default, any public account, no approval) or the official TikTok Research API.',
     steps: [
       ['Choose the data source', 'Apify needs only your Apify token and works for any public account. The Research API is TikTok\'s official route but requires an approved research application.'],
-      ['Apify: paste the token and save', 'The same token as Instagram and Facebook. Default actor: clockworks/tiktok-scraper (about $0.50-4 per 1,000 videos depending on the actor\'s pricing).'],
+      ['Apify: link the token above', 'Same token as Instagram and Facebook; TikTok is collected with clockworks/tiktok-scraper.'],
       ['Research API: paste client key and secret', 'developers.tiktok.com → Research API → apply → add the Research API product to your app → copy the credentials.'],
       ['Add competitor accounts', 'Use the @username or profile URL.'],
     ],
@@ -100,7 +98,7 @@ export function create(ctx) {
     ctx.setTitle('Connect & settings', 'Connect platforms, add competitors, import data and control collection');
     const [creds, competitors, status, runs] = await Promise.all([get('/api/credentials'), get('/api/competitors'), get('/api/sync/status'), get('/api/sync/runs?limit=25')]);
     const credMap = new Map(creds.map((c) => [c.platform, c]));
-    replace(platformsBox, ctx.meta.providers.map((p) => platformCard(p, credMap.get(p.id), competitors)));
+    replace(platformsBox, apifyCard(), ctx.meta.providers.map((p) => platformCard(p, credMap.get(p.id), competitors)));
     replace(syncBox, syncCard(status, competitors));
     replace(importBox, importCard());
     replace(runsBox, card('Recent collection runs', null, runsTable(runs)));
@@ -164,6 +162,50 @@ export function create(ctx) {
   }
 
 
+
+  const APIFY = new Set(['instagram', 'facebook', 'tiktok']);
+  function apifyCard() {
+    const linked = ctx.meta.sharedApifyToken;
+    const msg = h('div');
+    const input = h('input', { class: 'input', type: 'password', placeholder: linked ? 'Token saved. Paste a new one to replace it.' : 'apify_api_…', autocomplete: 'off', spellcheck: 'false' });
+    const form = h('form', { class: 'credential-form', onSubmit: async (e) => {
+      e.preventDefault();
+      const btn = e.submitter; if (btn) btn.disabled = true;
+      replace(msg, h('div', { class: 'status-msg' }, 'Saving and testing…'));
+      try {
+        const res = await put('/api/credentials/apify', { apifyToken: input.value });
+        replace(msg, h('div', { class: `status-msg ${res.test?.ok ? 'ok' : 'bad'}` }, res.test?.message || 'Saved'));
+        if (res.test?.ok) ctx.toast('Apify linked: Instagram, Facebook and TikTok are ready');
+        await ctx.refreshMeta(); update();
+      } catch (err) { replace(msg, h('div', { class: 'status-msg bad' }, err.message)); }
+      finally { if (btn) btn.disabled = false; }
+    } },
+      h('label', { class: 'field' }, 'Apify API token', input, h('span', { class: 'field-hint' }, 'Apify Console → Settings → API & Integrations → Personal API tokens.')),
+      h('div', { class: 'actions' },
+        h('button', { class: 'btn primary', type: 'submit' }, linked ? 'Update & test' : 'Link Instagram, Facebook & TikTok'),
+        linked ? h('button', { class: 'btn danger', type: 'button', onClick: async () => { if (!confirm('Unlink Apify? Instagram, Facebook and TikTok will stop collecting.')) return; await del('/api/credentials/apify'); await ctx.refreshMeta(); update(); } }, 'Unlink') : null,
+      ), msg);
+    return h('div', { class: 'card platform-card', style: { padding: 0 } },
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px', padding: '16px 20px' } },
+        h('div', { class: 'brand-mark', style: { background: 'var(--surface-3)', color: 'var(--text)' } }, 'A'),
+        h('div', { class: 'title', style: { flex: 1 } }, h('strong', null, 'Apify'), h('div', { class: 'muted small' }, 'One token links Instagram, Facebook and TikTok. Apify runs the collection; you only paste the token.')),
+        h('span', { class: `badge ${linked ? 'ok' : 'warn'}` }, icon(linked ? 'check' : 'lock'), linked ? 'Linked' : 'Not linked'),
+      ),
+      h('div', { class: 'body', style: { gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)' } },
+        h('div', { class: 'guide' },
+          h('h4', null, 'How to get the token'),
+          h('ol', null,
+            h('li', null, h('strong', null, 'Create an Apify account'), ' — console.apify.com → Sign up (the free plan includes monthly credits).'),
+            h('li', null, h('strong', null, 'Copy your API token'), ' — Settings → API & Integrations → Personal API tokens → copy or create one.'),
+            h('li', null, h('strong', null, 'Paste it here and click Link'), ' — the token is tested against your Apify account and stored encrypted.'),
+            h('li', null, h('strong', null, 'Add competitors'), ' — then click Sync now. Each account costs a few cents per sync (about $2 per 1,000 posts).'),
+          ),
+        ),
+        h('div', null, h('h4', null, 'Token'), form),
+      ),
+    );
+  }
+
   function platformCard(p, saved, competitors) {
     const g = GUIDES[p.id];
     const connected = Boolean(saved);
@@ -192,11 +234,12 @@ export function create(ctx) {
       if (f.type === 'select') {
         input = h('select', { class: 'select', onChange: refresh }, f.options.map(([v, l]) => h('option', { value: v, selected: (saved?.fields?.[f.key] || f.options[0][0]) === v ? true : null }, l)));
       } else {
-        const sharedAvailable = f.shared === 'apify' && ctx.meta.sharedApifyToken && !saved?.fields?.[f.key];
-        input = h('input', { class: 'input', type: f.secret ? 'password' : 'text', placeholder: sharedAvailable ? 'Using the Apify token saved for another platform' : f.placeholder || '', value: saved?.fields?.[f.key] || '', autocomplete: 'off', spellcheck: 'false' });
+        input = h('input', { class: 'input', type: f.secret ? 'password' : 'text', placeholder: f.placeholder || '', value: saved?.fields?.[f.key] || '', autocomplete: 'off', spellcheck: 'false' });
       }
       inputs[f.key] = input;
-      rows[f.key] = h('label', { class: 'field' }, `${f.label}${f.optional ? ' (optional)' : ''}`, input, f.hint ? h('span', { class: 'field-hint' }, f.hint) : null);
+      rows[f.key] = f.shared === 'apify'
+        ? h('div', { class: 'field' }, h('span', { class: 'small secondary' }, ctx.meta.sharedApifyToken ? 'Uses the Apify token from the Apify card above.' : 'Paste your Apify token in the Apify card above first.'))
+        : h('label', { class: 'field' }, `${f.label}${f.optional ? ' (optional)' : ''}`, input, f.hint ? h('span', { class: 'field-hint' }, f.hint) : null);
       form.append(rows[f.key]);
     }
     refresh();
@@ -207,6 +250,14 @@ export function create(ctx) {
       saved ? h('span', { class: 'muted small' }, `Saved ${relTime(saved.updatedAt)}`) : null,
     ), msg);
 
+    const viaApify = APIFY.has(p.id) && (p.id !== 'tiktok' || (saved?.fields?.source || 'apify') === 'apify');
+    const linked = ctx.meta.sharedApifyToken;
+    const credentialsPane = viaApify && p.id !== 'tiktok'
+      ? h('div', null, h('h4', null, 'Credentials'),
+          h('p', { class: 'small secondary' }, linked ? 'Linked through the Apify token above. Nothing else to configure.' : 'Paste your Apify token in the Apify card above to link this platform.'),
+          linked ? h('div', { class: 'actions', style: { marginTop: '10px' } }, h('button', { class: 'btn', type: 'button', onClick: async () => { replace(msg, h('div', { class: 'status-msg' }, 'Testing…')); const r = await post(`/api/credentials/${p.id}/test`); replace(msg, h('div', { class: `status-msg ${r.ok ? 'ok' : 'bad'}` }, r.message)); } }, 'Test connection')) : null,
+          msg)
+      : h('div', null, h('h4', null, 'Credentials'), form, h('p', { class: 'field-hint', style: { marginTop: '10px' } }, 'Stored encrypted (AES-256-GCM) in the local database. Never sent anywhere except the platform\'s own API.'));
     const cap = (ok, label) => h('span', { class: `badge ${ok ? 'ok' : ''}` }, icon(ok ? 'check' : 'info'), label);
     return h('details', { class: 'card platform-card', open: !connected && p.id === 'youtube' ? true : null },
       h('summary', null,
@@ -222,7 +273,7 @@ export function create(ctx) {
           h('ol', null, g.steps.map(([t, d]) => h('li', null, h('strong', null, t), ' — ', d))),
           h('div', { class: 'note' }, h('strong', null, 'Data collected: '), g.data, h('br'), g.note),
         ),
-        h('div', null, h('h4', null, 'Credentials'), form, h('p', { class: 'field-hint', style: { marginTop: '10px' } }, 'Stored encrypted (AES-256-GCM) in the local database. Never sent anywhere except the platform\'s own API.')),
+        credentialsPane,
       ),
     );
   }
@@ -288,7 +339,7 @@ export function create(ctx) {
       h('thead', null, h('tr', null, h('th', null, 'Started'), h('th', null, 'Account'), h('th', null, 'Competitor'), h('th', null, 'Result'), h('th', { class: 'num' }, 'Posts'))),
       h('tbody', null, runs.map((r) => h('tr', null,
         h('td', { class: 'nowrap', title: longDate(r.started_at) }, relTime(r.started_at)),
-        h('td', null, r.platform ? h('span', { class: 'post-cell' }, platformBadge(r.platform, { label: false }), `@${r.handle}`) : h('span', { class: 'muted' }, 'deleted account')),
+        h('td', null, r.platform ? h('span', { class: 'post-cell' }, platformBadge(r.platform, { label: false }), at(r.handle)) : h('span', { class: 'muted' }, 'deleted account')),
         h('td', null, r.competitor || '—'),
         h('td', null, r.ok === null ? h('span', { class: 'badge' }, 'running') : h('span', { class: `badge ${r.ok ? 'ok' : 'bad'}`, title: r.message || '' }, r.ok ? 'ok' : 'failed'), r.ok === 0 ? h('div', { class: 'small muted' }, r.message) : null),
         h('td', { class: 'num' }, int(r.posts_upserted)),

@@ -1,5 +1,5 @@
 import { h, icon } from './dom.js';
-import { compact, int, pct, signedPct, change, longDate, relTime, title, truncate } from './format.js';
+import { compact, int, pct, signedPct, change, longDate, relTime, title, truncate, at } from './format.js';
 import { slotColor, sparkline } from './charts.js';
 
 export const PLATFORM_NAMES = { youtube: 'YouTube', instagram: 'Instagram', facebook: 'Facebook', tiktok: 'TikTok', x: 'X' };
@@ -88,7 +88,7 @@ export function postsTable(rows, { showCompetitor = true, sort, onSort } = {}) {
         p.thumbnail_url ? h('img', { class: 'thumb', src: p.thumbnail_url, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' }) : null,
         h('div', { style: { minWidth: 0 } },
           h('div', { class: 'caption', title: p.caption || '' }, p.url ? h('a', { href: p.url, target: '_blank', rel: 'noopener noreferrer' }, truncate(p.caption || '(no caption)', 80)) : truncate(p.caption || '(no caption)', 80)),
-          h('div', { class: 'meta' }, `@${p.handle}`),
+          h('div', { class: 'meta' }, at(p.handle)),
         ))),
       showCompetitor ? h('td', null, competitorLink(p)) : null,
       h('td', null, platformBadge(p.platform)),

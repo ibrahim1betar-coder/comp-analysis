@@ -61,9 +61,21 @@ export function storeAccountData(accountId, platform, { profile, posts }, { mark
   });
 }
 
-/** Sync one account. `full` re-collects the whole look-back window instead of only recent posts. */
+/**
+ * Date floor for a collection, as ISO string or null (= no floor, newest POSTS_PER_ACCOUNT posts).
+ * First sync and full re-sync: no floor, so accounts that post rarely still show their latest posts.
+ * Incremental sync: re-read the last 14 days (counters keep updating) plus anything newer, never older than the look-back.
+ */
+export function computeSince(account, { full = false, now = Date.now() } = {}) {
+  if (full || !account.last_synced_at || !account.has_posts) return null;
+  const lookback = now - config.lookbackDays * 86400_000;
+  const recent = new Date(account.last_synced_at).getTime() - 14 * 86400_000;
+  return new Date(Math.max(lookback, recent)).toISOString();
+}
+
+/** Sync one account. `full` re-collects everything instead of only recent posts. */
 export async function syncAccount(accountId, { full = false } = {}) {
-  const account = stmt('SELECT * FROM accounts WHERE id = ?').get(accountId);
+  const account = stmt('SELECT a.*, EXISTS(SELECT 1 FROM posts WHERE account_id = a.id) AS has_posts FROM accounts a WHERE a.id = ?').get(accountId);
   if (!account) throw new Error(`Account ${accountId} not found`);
   const startedAt = nowIso();
   const runId = stmt('INSERT INTO sync_runs (account_id, started_at) VALUES (?, ?)').run(accountId, startedAt).lastInsertRowid;
@@ -72,14 +84,8 @@ export async function syncAccount(accountId, { full = false } = {}) {
     const creds = getCredentials(account.platform);
     if (!creds) throw new Error(`${provider.name} is not connected. Add credentials on the Connect page.`);
 
-    const lookback = new Date(Date.now() - config.lookbackDays * 86400_000);
-    // Incremental: re-read the last 14 days so recent posts' counters keep updating, plus anything new.
-    let since = lookback;
-    if (!full && account.last_synced_at) {
-      const recent = new Date(new Date(account.last_synced_at).getTime() - 14 * 86400_000);
-      if (recent > since) since = recent;
-    }
-    const result = await provider.fetchAccount(account.handle, creds, { since: since.toISOString(), maxPosts: config.postsPerAccount });
+    const since = computeSince(account, { full });
+    const result = await provider.fetchAccount(account.handle, creds, { since, maxPosts: config.postsPerAccount });
     const count = storeAccountData(accountId, account.platform, result);
     stmt('UPDATE sync_runs SET finished_at = ?, ok = 1, message = ?, posts_upserted = ? WHERE id = ?').run(nowIso(), `${count} posts`, count, runId);
     return { ok: true, posts: count };

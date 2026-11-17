@@ -23,10 +23,11 @@ function applyTheme(t) {
 })();
 
 /* ---------- state & routing ---------- */
+const DEFAULT_RANGE = '90d';
 const state = {
   route: 'overview',
   param: null,
-  filters: { range: '30d', from: '', to: '', platforms: [], competitors: [] },
+  filters: { range: DEFAULT_RANGE, from: '', to: '', platforms: [], competitors: [] },
   meta: null,
   user: null,
   competitorList: [],
@@ -40,7 +41,7 @@ function parseHash() {
   state.route = ['overview', 'competitors', 'posts', 'connect'].includes(route) ? route : 'overview';
   state.param = param || null;
   state.filters = {
-    range: q.get('range') || (q.get('from') ? 'custom' : '30d'),
+    range: q.get('range') || (q.get('from') ? 'custom' : DEFAULT_RANGE),
     from: q.get('from') || '',
     to: q.get('to') || '',
     platforms: (q.get('platforms') || '').split(',').filter(Boolean),
@@ -152,7 +153,7 @@ function renderFilters() {
     h('option', { value: '' }, 'All competitors'),
     state.competitorList.map((c) => h('option', { value: String(c.id), selected: f.competitors.length === 1 && f.competitors[0] === String(c.id) ? true : null }, c.name))) : null;
   replace(filtersEl, range, custom, platformChips, state.route === 'competitors' && state.param ? null : compSel, h('span', { class: 'spacer' }),
-    f.platforms.length || f.competitors.length || f.range !== '30d' ? h('button', { class: 'btn ghost sm', onClick: () => setFilters({ range: '30d', from: '', to: '', platforms: [], competitors: [] }) }, 'Reset filters') : null);
+    f.platforms.length || f.competitors.length || f.range !== DEFAULT_RANGE ? h('button', { class: 'btn ghost sm', onClick: () => setFilters({ range: DEFAULT_RANGE, from: '', to: '', platforms: [], competitors: [] }) }, 'Reset filters') : null);
 }
 
 /* ---------- views ---------- */
@@ -163,6 +164,7 @@ const ctx = {
   get user() { return state.user; },
   get isAdmin() { return !state.user || state.user.role === 'admin'; },
   navigate, toast, startSync, pollSync, refreshMeta, clearDemo,
+  setRange: (range) => setFilters({ range }),
   setTitle(title, sub) { $('#page-title').textContent = title; $('#page-sub').textContent = sub || ''; document.title = `${title} · Competitor Pulse`; },
 };
 let currentView = null;

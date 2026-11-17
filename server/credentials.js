@@ -47,6 +47,29 @@ export function saveCredentials(platform, values) {
 /** A token pasted for one platform (e.g. the Apify token) is reused by the others that need the same one. */
 export const getShared = (name) => getSetting(`shared.${name}`, null);
 
+export const APIFY_PLATFORMS = ['instagram', 'facebook', 'tiktok'];
+
+/** Store one Apify token and connect every platform that runs through Apify (TikTok only if it is not set to the Research API). */
+export function saveApifyToken(token) {
+  const t = String(token || '').trim();
+  if (!t || t.startsWith('••')) {
+    if (!getShared('apify')) throw new Error('Apify API token is required');
+  } else setSetting('shared.apify', t);
+  for (const platform of APIFY_PLATFORMS) {
+    const existing = getCredentials(platform, { shared: false }) || {};
+    if (platform === 'tiktok' && existing.source === 'research') continue;
+    saveCredentials(platform, { ...existing, source: platform === 'tiktok' ? 'apify' : undefined, apifyToken: getShared('apify') });
+  }
+}
+
+export function deleteApifyToken() {
+  stmt('DELETE FROM settings WHERE key = ?').run('shared.apify');
+  for (const platform of APIFY_PLATFORMS) {
+    const existing = getCredentials(platform, { shared: false });
+    if (existing && existing.source !== 'research') deleteCredentials(platform);
+  }
+}
+
 export function deleteCredentials(platform) {
   stmt('DELETE FROM credentials WHERE platform = ?').run(platform);
 }

@@ -46,23 +46,19 @@ export default {
   name: 'Facebook',
   source: 'Apify',
   capabilities: { views: true, interactions: true, followers: true, shares: true, saves: false },
-  credentialFields: [
-    { key: 'apifyToken', label: 'Apify API token', secret: true, placeholder: 'apify_api_…', shared: 'apify' },
-    { key: 'actor', label: 'Posts actor', secret: false, placeholder: 'apify/facebook-posts-scraper', optional: true, hint: 'Leave empty for apify/facebook-posts-scraper.' },
-    { key: 'pageActor', label: 'Page actor', secret: false, placeholder: 'apify/facebook-pages-scraper', optional: true, hint: 'Used for follower counts. Leave empty for the default.' },
-  ],
+  credentialFields: [{ key: 'apifyToken', label: 'Apify API token', secret: true, placeholder: 'apify_api_…', shared: 'apify' }],
   handlePlaceholder: 'Page username, page ID or page URL',
 
   async test(creds) {
     const me = await whoAmI(creds.apifyToken);
-    return `Apify token works (account: ${me.username || me.id}). Facebook posts, reactions, comments, shares and video views will be collected with ${creds.actor || 'apify/facebook-posts-scraper'}.`;
+    return `Apify token works (account: ${me.username || me.id}). Facebook posts, reactions, comments, shares and video views will be collected with ${process.env.APIFY_FACEBOOK_ACTOR || 'apify/facebook-posts-scraper'}.`;
   },
 
   async fetchAccount(handle, creds, { since, maxPosts }) {
     const page = parseHandle(handle);
     const token = creds.apifyToken;
     const url = pageUrl(page);
-    const items = await runActor(token, creds.actor || 'apify/facebook-posts-scraper', {
+    const items = await runActor(token, process.env.APIFY_FACEBOOK_ACTOR || 'apify/facebook-posts-scraper', {
       startUrls: [{ url }],
       resultsLimit: Math.min(maxPosts, 200),
       onlyPostsNewerThan: since ? since.slice(0, 10) : undefined,
@@ -79,7 +75,7 @@ export default {
     const pageName = pick(items[0] || {}, 'pageName', 'user.name', 'pageTitle');
     let profile = { externalId: page, displayName: pageName || page, profileUrl: url, avatarUrl: null, followers: null, following: null, postsCount: null, totalViews: null, totalLikes: null };
     try {
-      const [pg] = await runActor(token, creds.pageActor || 'apify/facebook-pages-scraper', { startUrls: [{ url }] }, { timeoutSecs: 120 });
+      const [pg] = await runActor(token, process.env.APIFY_FACEBOOK_PAGE_ACTOR || 'apify/facebook-pages-scraper', { startUrls: [{ url }] }, { timeoutSecs: 120 });
       if (pg) profile = {
         externalId: String(pick(pg, 'pageId', 'facebookId', 'id') || page),
         displayName: pick(pg, 'title', 'name', 'pageName') || pageName || page,

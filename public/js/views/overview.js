@@ -54,6 +54,7 @@ export function create(ctx) {
     // banner
     const banners = [];
     if (d.hasDemoData) banners.push(h('div', { class: 'banner' }, h('p', null, 'You are looking at demo data. ', h('a', { href: '#/connect' }, 'Connect your platforms'), ' to replace it with live competitor metrics.'), h('button', { class: 'btn sm', onClick: ctx.clearDemo }, 'Remove demo data')));
+    if (!t.posts && ctx.meta.stats.posts > 0) banners.push(h('div', { class: 'banner warn' }, h('p', null, `No posts were published in the selected period, but ${ctx.meta.stats.posts} collected posts exist. `, h('a', { href: '#/overview?range=all', onClick: (e) => { e.preventDefault(); ctx.setRange('all'); } }, 'Show all time'), ' or widen the date range.')));
     if (d.accountIssues.length) banners.push(h('div', { class: 'banner warn' }, h('p', null, `${d.accountIssues.length} account(s) failed to sync. `, h('a', { href: '#/competitors' }, 'See details'))));
     replace(slots.banner, banners.length ? h('div', { style: { display: 'grid', gap: '8px' } }, banners) : null);
 
