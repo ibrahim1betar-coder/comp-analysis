@@ -80,9 +80,20 @@ export function createList(ctx) {
         h('div', null, h('strong', null, m?.views === null || m?.views === undefined ? 'n/a' : compact(m.views)), 'video views'),
         h('div', null, h('strong', null, compact(m?.followers)), 'followers'),
       ),
+      outOfRangeNote(c, m),
       accountsEl,
       addRow,
     );
+  }
+
+  /** "0 in this period" is confusing when the account simply posts rarely: say where the posts are. */
+  function outOfRangeNote(c, m) {
+    const total = c.accounts.reduce((s, a) => s + (a.posts_total || 0), 0);
+    if ((m?.posts ?? 0) > 0 || !total) return null;
+    const latest = c.accounts.map((a) => a.latest_post_at).filter(Boolean).sort().pop();
+    return h('div', { class: 'banner warn', style: { padding: '8px 10px', fontSize: '0.8rem' } }, h('p', null,
+      `No posts in the selected period, but ${int(total)} collected post${total === 1 ? '' : 's'} exist${latest ? ` (latest ${relTime(latest)})` : ''}. `,
+      h('a', { href: '#', onClick: (e) => { e.preventDefault(); ctx.setRange('all'); } }, 'Show all time')));
   }
 
   function accountRow(a) {
@@ -156,7 +167,10 @@ export function createDetail(ctx, id) {
       h('a', { class: 'btn ghost sm', href: '#/competitors' }, '← All competitors'),
       h('div', { class: 'account-chips' }, d.accounts.map((a) => h('a', { class: 'chip', href: a.profileUrl || '#', target: a.profileUrl ? '_blank' : null, rel: 'noopener noreferrer' }, icon(a.platform), at(a.handle)))),
     ));
-    replace(insights, insightCards(d.insights));
+    const totalEver = d.accounts.reduce((s, a) => s + (a.postsTotal || 0), 0);
+    replace(insights, !t.posts && totalEver ? h('div', { style: { display: 'grid', gap: '10px' } },
+      h('div', { class: 'banner warn' }, h('p', null, `No posts were published in the selected period, but ${int(totalEver)} collected posts exist for this competitor. `, h('a', { href: '#', onClick: (e) => { e.preventDefault(); ctx.setRange('all'); } }, 'Show all time'), ' to include them.')),
+      insightCards(d.insights)) : insightCards(d.insights));
     const color = slotColor(c.slot);
     replace(kpis,
       statTile({ label: 'Interactions', value: t.interactions, prev: t.prev.interactions, series: d.series.total.interactions, color }),

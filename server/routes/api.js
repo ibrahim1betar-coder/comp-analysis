@@ -85,7 +85,10 @@ export default async function routes(app) {
   /* ---- competitors & accounts ---- */
   app.get('/api/competitors', async () => {
     const competitors = db.prepare('SELECT id, name, color_slot AS slot, is_self AS isSelf, notes, created_at AS createdAt FROM competitors ORDER BY id').all();
-    const accounts = db.prepare('SELECT id, competitor_id, platform, handle, display_name, avatar_url, profile_url, status, last_synced_at, last_error FROM accounts ORDER BY platform').all();
+    const accounts = db.prepare(`SELECT a.id, a.competitor_id, a.platform, a.handle, a.display_name, a.avatar_url, a.profile_url, a.status, a.last_synced_at, a.last_error,
+        (SELECT COUNT(*) FROM posts p WHERE p.account_id = a.id) AS posts_total,
+        (SELECT MAX(published_at) FROM posts p WHERE p.account_id = a.id) AS latest_post_at
+      FROM accounts a ORDER BY a.platform`).all().map((a) => ({ ...a, posts_total: Number(a.posts_total) }));
     return competitors.map((c) => ({ ...c, isSelf: Boolean(c.isSelf), accounts: accounts.filter((a) => a.competitor_id === c.id) }));
   });
 

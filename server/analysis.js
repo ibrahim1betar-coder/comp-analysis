@@ -266,7 +266,7 @@ export function competitorDetail(id, query) {
   if (!competitor) return null;
   const f = resolveFilters({ ...query, competitors: String(id) });
   return memo('competitor:' + JSON.stringify(f), () => {
-    const accounts = stmt('SELECT * FROM accounts WHERE competitor_id = ? ORDER BY platform').all(id);
+    const accounts = stmt('SELECT a.*, (SELECT COUNT(*) FROM posts p WHERE p.account_id = a.id) AS posts_total FROM accounts a WHERE a.competitor_id = ? ORDER BY a.platform').all(id);
     const byAccount = new Map(groupBy(f, 'a.id', 'grp').map((r) => [r.grp, r]));
     const fNow = new Map(followersBefore(f.to).map((r) => [r.account_id, r]));
     const fStart = new Map(followersBefore(f.from).map((r) => [r.account_id, r]));
@@ -276,7 +276,7 @@ export function competitorDetail(id, query) {
       const startF = fStart.get(a.id)?.followers ?? null;
       return {
         id: a.id, platform: a.platform, platformName: providers[a.platform]?.name || a.platform, handle: a.handle, displayName: a.display_name,
-        avatarUrl: a.avatar_url, profileUrl: a.profile_url, status: a.status, lastSyncedAt: a.last_synced_at, lastError: a.last_error,
+        avatarUrl: a.avatar_url, profileUrl: a.profile_url, status: a.status, lastSyncedAt: a.last_synced_at, lastError: a.last_error, postsTotal: Number(a.posts_total),
         followers, followerGrowth: followers !== null && startF !== null ? followers - startF : null,
         totalViews: fNow.get(a.id)?.total_views ?? null,
         posts: agg.posts, views: agg.views, interactions: agg.interactions, likes: agg.likes, comments: agg.comments, shares: agg.shares, saves: agg.saves,
