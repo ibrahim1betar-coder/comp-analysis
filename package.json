@@ -1,7 +1,7 @@
 {
-  "name": "competitor-pulse",
+  "name": "lime-competitor-analysis",
   "version": "1.0.0",
-  "description": "Competitor social media analysis dashboard: collects interactions and video views across YouTube, Instagram, Facebook, TikTok and X and analyses them in one place.",
+  "description": "Lime Competitor Analysis: competitor social media dashboard: collects interactions and video views across YouTube, Instagram, Facebook, TikTok and X and analyses them in one place.",
   "type": "module",
   "main": "server/index.js",
   "engines": {

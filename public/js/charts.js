@@ -8,14 +8,16 @@ export const SLOTS = {
 };
 export const SEQUENTIAL = ['#cde2fb', '#b7d3f6', '#9ec5f4', '#86b6ef', '#6da7ec', '#5598e7', '#3987e5', '#2a78d6', '#256abf', '#1c5cab', '#184f95', '#104281', '#0d366b'];
 
-export const isDark = () => document.documentElement.dataset.theme === 'dark';
+export const isDark = () => document.documentElement.dataset.theme !== 'light';
 export const slotColor = (slot) => SLOTS[isDark() ? 'dark' : 'light'][((slot || 1) - 1) % 8];
+/** Brand accent (lime) for single-series marks: bars, sparklines, meters. */
+export const accent = () => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#c8f135';
 export const OTHER = () => (isDark() ? '#6b6a65' : '#b3b2ab');
 
 function tokens() {
   const cs = getComputedStyle(document.documentElement);
   const v = (name) => cs.getPropertyValue(name).trim();
-  return { surface: v('--surface'), grid: v('--grid'), axis: v('--axis'), muted: v('--text-muted'), text: v('--text'), secondary: v('--text-secondary'), tooltipBg: v('--tooltip-bg'), tooltipText: v('--tooltip-text') };
+  return { surface: v('--surface'), grid: v('--grid'), axis: v('--axis'), muted: v('--text-muted'), text: v('--text'), secondary: v('--text-secondary'), tooltipBg: v('--tooltip-bg'), tooltipText: v('--tooltip-text'), accent: v('--accent') };
 }
 
 const instances = new Map();
@@ -133,8 +135,8 @@ export function barChart(canvas, { labels, data, color, horizontal = false, labe
       datasets: [{
         label,
         data,
-        backgroundColor: color || slotColor(1),
-        hoverBackgroundColor: color || slotColor(1),
+        backgroundColor: color || t.accent,
+        hoverBackgroundColor: color || t.accent,
         borderRadius: 4,
         borderSkipped: horizontal ? 'left' : 'bottom',
         maxBarThickness: 24,
@@ -191,14 +193,14 @@ export function sparkline(values, { width = 120, height = 32, color } = {}) {
   const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
   path.setAttribute('d', `M${pts.join(' L')}`);
   path.setAttribute('fill', 'none');
-  path.setAttribute('stroke', color || slotColor(1));
+  path.setAttribute('stroke', color || accent());
   path.setAttribute('stroke-width', '2');
   path.setAttribute('stroke-linecap', 'round');
   path.setAttribute('stroke-linejoin', 'round');
   svg.append(path);
   const area = document.createElementNS('http://www.w3.org/2000/svg', 'path');
   area.setAttribute('d', `M${pts[0]} L${pts.join(' L')} L${(2 + (values.length - 1) * step).toFixed(1)},${height} L2,${height} Z`);
-  area.setAttribute('fill', color || slotColor(1));
+  area.setAttribute('fill', color || accent());
   area.setAttribute('opacity', '0.1');
   svg.prepend(area);
   const last = pts[pts.length - 1].split(',');
@@ -206,7 +208,7 @@ export function sparkline(values, { width = 120, height = 32, color } = {}) {
   dot.setAttribute('cx', last[0]);
   dot.setAttribute('cy', last[1]);
   dot.setAttribute('r', '3');
-  dot.setAttribute('fill', color || slotColor(1));
+  dot.setAttribute('fill', color || accent());
   dot.setAttribute('stroke', 'var(--surface)');
   dot.setAttribute('stroke-width', '2');
   svg.append(dot);

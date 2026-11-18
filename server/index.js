@@ -61,7 +61,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   try {
     await app.listen({ port: config.port, host: config.host });
     const s = stats();
-    app.log.info(`Competitor Pulse ready: ${s.competitors} competitors, ${s.accounts} accounts, ${s.posts} posts. Login ${authEnabled() ? 'required' : 'disabled (AUTH_DISABLED=1)'}.`);
+    app.log.info(`Lime Competitor Analysis ready: ${s.competitors} competitors, ${s.accounts} accounts, ${s.posts} posts. Login ${authEnabled() ? 'required' : 'disabled (AUTH_DISABLED=1)'}.`);
     const created = app.firstAdmin;
     console.log(`\n  ➜  Open http://localhost:${config.port} in your browser${s.posts ? '' : '  (tip: run "npm run seed" first to see demo data)'}`);
     if (created) console.log(`  ➜  First admin account created: username "${created.username}", password "${created.password}"${created.isDefault ? '  ← change it after signing in (Connect → Users & access)' : ''}`);

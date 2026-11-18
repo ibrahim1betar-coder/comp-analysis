@@ -1,4 +1,4 @@
-# Competitor Pulse
+# Lime Competitor Analysis
 
 A self-hosted competitor analysis dashboard for social media. It collects your competitors' posts from
 **YouTube** (your own Data API key), **Instagram, Facebook and TikTok** (through your Apify account) and

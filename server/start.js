@@ -14,7 +14,7 @@ const sqliteBuiltIn = major > 22 || (major === 22 && minor >= 5);
 const needsFlag = major === 22 && minor < 13 || (major === 23 && minor < 4);
 if (!sqliteBuiltIn) {
   fail([
-    `Competitor Pulse needs Node.js 22.13 or newer. You are running Node ${process.versions.node}.`,
+    `Lime Competitor Analysis needs Node.js 22.13 or newer. You are running Node ${process.versions.node}.`,
     'Install the current LTS from https://nodejs.org (or run: nvm install 22 && nvm use 22), then try again.',
   ]);
 }

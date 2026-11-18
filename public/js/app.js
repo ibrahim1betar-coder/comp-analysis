@@ -19,7 +19,7 @@ function applyTheme(t) {
 (() => {
   let t = null;
   try { t = localStorage.getItem(THEME_KEY); } catch {}
-  applyTheme(t || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+  applyTheme(t || 'dark');
 })();
 
 /* ---------- state & routing ---------- */
@@ -194,7 +194,7 @@ const ctx = {
   get isAdmin() { return !state.user || state.user.role === 'admin'; },
   navigate, toast, startSync, pollSync, refreshMeta, clearDemo,
   setRange: (range) => setFilters({ range }),
-  setTitle(title, sub) { $('#page-title').textContent = title; $('#page-sub').textContent = sub || ''; document.title = `${title} · Competitor Pulse`; },
+  setTitle(title, sub) { $('#page-title').textContent = title; $('#page-sub').textContent = sub || ''; document.title = `${title} · Lime Competitor Analysis`; },
 };
 let currentView = null;
 let currentKey = null;
@@ -229,7 +229,7 @@ function showLogin(message) {
     try { await post('/api/login', { username: user.value.trim(), password: pw.value }); location.reload(); }
     catch (err) { msg.hidden = false; msg.textContent = err.message; }
   } },
-    h('div', { class: 'brand', style: { padding: 0 } }, h('div', { class: 'brand-mark' }, 'CP'), h('div', null, h('div', { class: 'brand-name' }, 'Competitor Pulse'), h('div', { class: 'brand-sub' }, 'Sign in to continue'))),
+    h('div', { class: 'brand', style: { padding: 0 } }, h('div', { class: 'brand-mark' }, 'L'), h('div', null, h('div', { class: 'brand-name' }, 'Lime Competitor Analysis'), h('div', { class: 'brand-sub' }, 'Sign in to continue'))),
     message ? h('p', { class: 'small secondary' }, message) : null,
     h('label', { class: 'field' }, 'Username', user),
     h('label', { class: 'field' }, 'Password', pw),

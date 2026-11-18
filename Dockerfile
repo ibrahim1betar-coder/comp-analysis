@@ -8,5 +8,5 @@ COPY public ./public
 RUN mkdir -p /app/data
 VOLUME ["/app/data"]
 EXPOSE 3000
-ENV PORT=3000 HOST=0.0.0.0 DB_PATH=/app/data/competitor-pulse.db
+ENV PORT=3000 HOST=0.0.0.0 DB_PATH=/app/data/lime-competitor-analysis.db
 CMD ["node", "server/start.js", "index"]
