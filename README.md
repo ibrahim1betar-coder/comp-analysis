@@ -64,7 +64,11 @@ Meta only grants API access through an app, so this is a one-time setup, after w
 If Facebook answers **"URL blocked"**, the redirect was not accepted. Either fix the whitelist (Client OAuth login = Yes,
 Web OAuth login = Yes, the exact URI in *Valid OAuth Redirect URIs*), or use the fallback on the Meta card,
 **"Connect without whitelisting"**: it sends you to Facebook's own `login_success.html` page (always allowed); copy that
-page's address into the dashboard and click *Finish connection*.
+page's address into the dashboard and click *Finish connection*. If Facebook answers **"Can't load URL"** instead, the app
+has no Facebook Login product configured at all: use the third option on the Meta card, **paste a token from the Graph API
+Explorer** (developers.facebook.com/tools/explorer, pick your app, "Get User Access Token" with the Page and Instagram
+permissions, Generate). The dashboard extends it to a 60-day token with your App Secret and finds your Page and Instagram
+account itself.
 
 Why no direct username/password login: Facebook, Instagram and TikTok block automated logins (checkpoints, 2FA, suspensions)
 and it would require storing your personal passwords. The official APIs and Apify are the two routes that work reliably.

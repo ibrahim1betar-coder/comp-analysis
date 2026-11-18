@@ -1,7 +1,7 @@
 import './helpers.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { instagramFetch, facebookFetch, oauthUrl, exchangeCode, discoverAccounts, parsePastedRedirect, MANUAL_REDIRECT } from '../server/providers/graph.js';
+import { instagramFetch, facebookFetch, oauthUrl, exchangeCode, discoverAccounts, parsePastedRedirect, MANUAL_REDIRECT, extendToken } from '../server/providers/graph.js';
 import youtube, { mapApifyVideo } from '../server/providers/youtube.js';
 import x, { mapApifyTweet } from '../server/providers/x.js';
 import instagram from '../server/providers/instagram.js';
@@ -50,6 +50,8 @@ test('Connect with Facebook: oauth url, code exchange and account discovery', as
     return { id: 'u1', name: 'Me' };
   }, async () => {
     assert.equal(await exchangeCode({ appId: '1', appSecret: '2', redirectUri: 'r', code: 'c' }), 'LONG');
+    const ext = await extendToken({ appId: '1', appSecret: '2', token: 'SHORT' });
+    assert.deepEqual({ t: ext.token, e: ext.extended }, { t: 'LONG', e: true });
     const d = await discoverAccounts('LONG');
     assert.equal(d.user.name, 'Me');
     assert.equal(d.pages.find((p) => p.igUserId).igUsername, 'mybrand');

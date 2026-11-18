@@ -236,13 +236,33 @@ export function create(ctx) {
       ),
       conn?.user ? h('div', { class: 'status-msg ok' }, `Connected as ${conn.user} (${relTime(conn.connectedAt)}): ${conn.pages.map((p) => `${p.pageName}${p.igUsername ? ` + @${p.igUsername}` : ''}`).join(', ') || 'no Pages found'}`) : null,
       msg,
-      m ? manualFlow() : null,
+      manualFlow(),
+      tokenFlow(),
     );
+    function tokenFlow() {
+      const tokenInput = h('input', { class: 'input', placeholder: 'EAAG… (User access token from the Graph API Explorer)', autocomplete: 'off', spellcheck: 'false' });
+      const result = h('div');
+      return h('details', { class: 'manual-flow', open: true },
+        h('summary', null, 'No luck with the login buttons? Paste a token from the Graph API Explorer (no login setup needed)'),
+        h('ol', { class: 'small secondary', style: { paddingLeft: '18px', margin: '8px 0', display: 'grid', gap: '4px' } },
+          h('li', null, 'Open ', h('a', { href: 'https://developers.facebook.com/tools/explorer/', target: '_blank', rel: 'noopener noreferrer' }, 'developers.facebook.com/tools/explorer'), ' and sign in with your Facebook account.'),
+          h('li', null, 'On the right: ', h('strong', null, 'Meta App'), ' = your app · ', h('strong', null, 'User or Page'), ' = "Get User Access Token" · under ', h('strong', null, 'Permissions'), ' add: pages_show_list, pages_read_engagement, instagram_basic, instagram_manage_insights, business_management.'),
+          h('li', null, 'Click ', h('strong', null, 'Generate Access Token'), ', approve the dialog, then copy the token shown at the top.'),
+          h('li', null, 'Paste it below and click ', h('strong', null, 'Connect'), '. With your App ID and Secret saved above, the dashboard turns it into a 60-day token.'),
+        ),
+        h('div', { class: 'actions', style: { marginTop: '8px' } }, tokenInput, h('button', { class: 'btn primary', type: 'button', onClick: async () => {
+          replace(result, h('div', { class: 'status-msg' }, 'Connecting…'));
+          try { const r = await post('/api/oauth/meta/token', { token: tokenInput.value }); replace(result, h('div', { class: 'status-msg ok' }, r.message)); ctx.toast('Facebook connected'); tokenInput.value = ''; await ctx.refreshMeta(); update(); }
+          catch (err) { replace(result, h('div', { class: 'status-msg bad' }, err.message)); }
+        } }, 'Connect')),
+        result,
+      );
+    }
     function manualFlow() {
       const pasted = h('input', { class: 'input', placeholder: 'https://www.facebook.com/connect/login_success.html?code=…', autocomplete: 'off', spellcheck: 'false' });
       const result = h('div');
       return h('details', { class: 'manual-flow' },
-        h('summary', null, 'Getting "URL blocked"? Connect without whitelisting instead'),
+        h('summary', null, 'Getting "URL blocked"? Connect without whitelisting instead (needs the Facebook Login product added to the app)'),
         h('ol', { class: 'small secondary', style: { paddingLeft: '18px', margin: '8px 0', display: 'grid', gap: '4px' } },
           h('li', null, 'Click ', h('strong', null, 'Open Facebook login'), ' and sign in. You will land on a Facebook page that says "Success".'),
           h('li', null, 'Copy the full address from your browser\'s address bar on that page and paste it below.'),

@@ -106,6 +106,16 @@ export async function exchangeCode({ appId, appSecret, redirectUri, code }) {
   const long = await fetchJson(`${GRAPH}/oauth/access_token?${qs({ grant_type: 'fb_exchange_token', client_id: appId, client_secret: appSecret, fb_exchange_token: short.access_token })}`);
   return long.access_token || short.access_token;
 }
+/** Turn any user token of this app (e.g. from the Graph API Explorer, valid 1-2 h) into a long-lived one (about 60 days). */
+export async function extendToken({ appId, appSecret, token }) {
+  try {
+    const long = await fetchJson(`${GRAPH}/oauth/access_token?${qs({ grant_type: 'fb_exchange_token', client_id: appId, client_secret: appSecret, fb_exchange_token: token })}`);
+    return { token: long.access_token || token, extended: Boolean(long.access_token), expiresIn: long.expires_in || null };
+  } catch (e) {
+    return { token, extended: false, error: e.message };
+  }
+}
+
 /** Pages the user manages and the Instagram professional accounts linked to them. */
 export async function discoverAccounts(accessToken) {
   const me = await fetchJson(`${GRAPH}/me?${qs({ fields: 'id,name', access_token: accessToken })}`);

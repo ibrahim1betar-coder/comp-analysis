@@ -3,7 +3,7 @@ import { db, stmt, transaction, nowIso, today, getSetting, setSetting } from '..
 import { config } from '../config.js';
 import { providers, PLATFORMS, getProvider, normaliseHandle, describeProviders } from '../providers/index.js';
 import { getCredentials, saveCredentials, deleteCredentials, configuredPlatforms, describeCredentials, getShared, saveApifyToken, deleteApifyToken, getMetaApp, saveMetaApp, effectiveCapabilities } from '../credentials.js';
-import { oauthUrl, exchangeCode, discoverAccounts, META_SCOPES, MANUAL_REDIRECT, parsePastedRedirect } from '../providers/graph.js';
+import { oauthUrl, exchangeCode, discoverAccounts, META_SCOPES, MANUAL_REDIRECT, parsePastedRedirect, extendToken } from '../providers/graph.js';
 import { sign, safeEqual } from '../crypto.js';
 import { whoAmI } from '../apify.js';
 import { syncAll, syncAccount, syncState, storeAccountData } from '../collector.js';
@@ -211,14 +211,33 @@ export default async function routes(app) {
   async function finishMetaLogin(code, redirectUri) {
     const m = getMetaApp();
     const token = await exchangeCode({ appId: m.appId, appSecret: m.appSecret, redirectUri, code });
+    return connectMetaToken(token);
+  }
+  /** Store a Meta user token (already long-lived or not) and configure Facebook + Instagram from the Pages it can see. */
+  async function connectMetaToken(token, note = '') {
     const { user, pages } = await discoverAccounts(token);
     saveCredentials('facebook', { source: 'graph', accessToken: token });
     const ig = pages.find((p) => p.igUserId);
     if (ig) saveCredentials('instagram', { source: 'graph', accessToken: token, igUserId: ig.igUserId });
     setSetting('meta.connection', { user: user.name, pages, connectedAt: nowIso() });
     analysis.invalidate();
-    return `Connected as ${user.name}: ${pages.length} Page(s)${ig ? `, Instagram @${ig.igUsername}` : ', no Instagram professional account linked to your Pages'}`;
+    return `Connected as ${user.name}: ${pages.length} Page(s)${ig ? `, Instagram @${ig.igUsername}` : ', no Instagram professional account linked to your Pages'}${note}`;
   }
+  /** Paste-a-token flow: a user token generated in the Graph API Explorer for this app. No Login product or redirect needed. */
+  app.post('/api/oauth/meta/token', async (req, reply) => {
+    const m = getMetaApp();
+    const raw = String(req.body?.token || '').trim();
+    if (!raw) return bad(reply, 'Paste the access token generated in the Graph API Explorer');
+    let token = raw;
+    let note = '';
+    if (m) {
+      const ext = await extendToken({ appId: m.appId, appSecret: m.appSecret, token: raw });
+      token = ext.token;
+      note = ext.extended ? ` · token extended to ${ext.expiresIn ? Math.round(ext.expiresIn / 86400) + ' days' : 'long-lived'}` : ` · could not extend the token (${ext.error || 'app mismatch'}); it will expire in 1-2 hours`;
+    } else note = ' · save your App ID and App Secret to extend tokens to 60 days';
+    try { return { ok: true, message: await connectMetaToken(token, note) }; }
+    catch (e) { return bad(reply, `Meta rejected the token: ${e.message}`); }
+  });
   app.get('/api/oauth/meta/manual-url', async (req, reply) => {
     const m = getMetaApp();
     if (!m) return bad(reply, 'Save your Meta App ID and App Secret first');
