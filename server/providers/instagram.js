@@ -1,6 +1,7 @@
 /** Instagram via Apify (public data, no Meta app needed). Default actor: apify/instagram-scraper. */
 import { ApiError } from '../http.js';
 import { runActor, whoAmI, pick, num, when } from '../apify.js';
+import { instagramTest, instagramFetch } from './graph.js';
 
 export function parseHandle(input) {
   const h = String(input).trim();
@@ -41,18 +42,26 @@ export function mapPost(p) {
 export default {
   id: 'instagram',
   name: 'Instagram',
-  source: 'Apify',
+  source: 'Apify or Meta Graph API',
   capabilities: { views: true, interactions: true, followers: true, shares: false, saves: false },
-  credentialFields: [{ key: 'apifyToken', label: 'Apify API token', secret: true, placeholder: 'apify_api_…', shared: 'apify' }],
+  capabilitiesFor: (creds) => (creds?.source === 'graph' ? { views: false, interactions: true, followers: true, shares: false, saves: false } : undefined),
+  credentialFields: [
+    { key: 'source', label: 'Data source', type: 'select', options: [['apify', 'Apify (public data incl. reel views)'], ['graph', 'Meta Graph API (official, your own Meta app)']], secret: false },
+    { key: 'apifyToken', label: 'Apify API token', secret: true, placeholder: 'apify_api_…', shared: 'apify', showWhen: { source: 'apify' } },
+    { key: 'accessToken', label: 'Meta access token (long-lived)', secret: true, placeholder: 'EAAG…', showWhen: { source: 'graph' }, hint: 'Filled automatically by "Connect with Facebook" on the Meta card.' },
+    { key: 'igUserId', label: 'Your Instagram professional account ID', secret: false, placeholder: '1784…', showWhen: { source: 'graph' } },
+  ],
   handlePlaceholder: '@username or profile URL (any public account)',
 
   async test(creds) {
+    if (creds.source === 'graph') return instagramTest(creds);
     const me = await whoAmI(creds.apifyToken);
     return `Apify token works (account: ${me.username || me.id}). Instagram posts and reels views will be collected with ${process.env.APIFY_INSTAGRAM_ACTOR || 'apify/instagram-scraper'}.`;
   },
 
   async fetchAccount(handle, creds, { since, maxPosts }) {
     const username = parseHandle(handle);
+    if (creds.source === 'graph') return instagramFetch(username, creds, { since, maxPosts });
     const token = creds.apifyToken;
     const limit = maxPosts;
 

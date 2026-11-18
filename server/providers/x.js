@@ -1,4 +1,5 @@
 import { fetchJson, qs, ApiError } from '../http.js';
+import { runActor, whoAmI, pick, num, when } from '../apify.js';
 
 const API = 'https://api.x.com/2';
 
@@ -8,11 +9,55 @@ export function parseHandle(input) {
   return m ? m[1] : h.replace(/^@/, '');
 }
 
+/** Map one apidojo/tweet-scraper item to our post shape. */
+export function mapApifyTweet(t, username) {
+  const id = pick(t, 'id', 'id_str', 'tweetId');
+  if (!id) return null;
+  const media = pick(t, 'extendedEntities.media', 'media') || [];
+  const video = Array.isArray(media) && media.find((m) => m.type === 'video' || m.type === 'animated_gif');
+  return {
+    externalId: String(id),
+    publishedAt: when(pick(t, 'createdAt', 'created_at', 'timestamp')),
+    type: video ? 'video' : Array.isArray(media) && media.length ? 'image' : 'text',
+    url: pick(t, 'url', 'twitterUrl') || `https://x.com/${username}/status/${id}`,
+    caption: pick(t, 'text', 'fullText', 'full_text') || '',
+    thumbnailUrl: video ? pick(video, 'media_url_https', 'mediaUrl') || null : null,
+    views: num(pick(t, 'viewCount', 'views', 'impressions')) ?? null,
+    likes: num(pick(t, 'likeCount', 'favorite_count', 'likes')) ?? 0,
+    comments: num(pick(t, 'replyCount', 'reply_count', 'replies')) ?? 0,
+    shares: (num(pick(t, 'retweetCount', 'retweet_count', 'retweets')) ?? 0) + (num(pick(t, 'quoteCount', 'quote_count', 'quotes')) ?? 0),
+    saves: num(pick(t, 'bookmarkCount', 'bookmark_count', 'bookmarks')) ?? 0,
+  };
+}
+
+async function fetchViaApify(username, creds, { since, maxPosts }) {
+  const items = await runActor(creds.apifyToken, process.env.APIFY_X_ACTOR || 'apidojo/tweet-scraper', {
+    twitterHandles: [username], maxItems: maxPosts, sort: 'Latest', onlyVerifiedUsers: false, includeSearchTerms: false,
+    start: since ? since.slice(0, 10) : undefined,
+  });
+  if (items[0]?.error || items[0]?.noResults) throw new ApiError(`Apify: ${items[0].errorDescription || items[0].error || 'no results'}`, { status: 404 });
+  const posts = items.map((t) => mapApifyTweet(t, username)).filter((p) => p && p.publishedAt && (!since || p.publishedAt >= since));
+  const a = pick(items[0] || {}, 'author') || {};
+  const profile = {
+    externalId: String(pick(a, 'id', 'id_str') || username), displayName: pick(a, 'name') || username, avatarUrl: pick(a, 'profilePicture', 'profile_image_url_https') || null,
+    profileUrl: `https://x.com/${pick(a, 'userName', 'screen_name') || username}`, followers: num(pick(a, 'followers', 'followers_count')), following: num(pick(a, 'following', 'friends_count')),
+    postsCount: num(pick(a, 'statusesCount', 'statuses_count')), totalViews: null, totalLikes: null,
+  };
+  if (!posts.length && profile.followers === null) throw new ApiError(`X account "@${username}" returned no data from Apify`, { status: 404 });
+  return { profile, posts };
+}
+
 export default {
   id: 'x',
   name: 'X (Twitter)',
+  source: 'X API or Apify',
   capabilities: { views: true, interactions: true, followers: true, shares: true, saves: true },
-  credentialFields: [{ key: 'bearerToken', label: 'App bearer token (Basic tier or higher)', secret: true, placeholder: 'AAAA…' }],
+  credentialFields: [
+    { key: 'source', label: 'Data source', type: 'select', options: [['api', 'X API v2 (official, Basic tier or higher)'], ['apify', 'Apify (apidojo/tweet-scraper)']], secret: false },
+    { key: 'bearerToken', label: 'App bearer token', secret: true, placeholder: 'AAAA…', showWhen: { source: 'api' } },
+    { key: 'apifyToken', label: 'Apify API token', secret: true, placeholder: 'apify_api_…', shared: 'apify', showWhen: { source: 'apify' } },
+  ],
+  defaultSource: 'api',
   handlePlaceholder: '@username or profile URL',
 
   headers(creds) {
@@ -20,6 +65,10 @@ export default {
   },
 
   async test(creds) {
+    if (creds.source === 'apify') {
+      const me = await whoAmI(creds.apifyToken);
+      return `Apify token works (account: ${me.username || me.id}). X posts will be collected with ${process.env.APIFY_X_ACTOR || 'apidojo/tweet-scraper'}.`;
+    }
     const data = await fetchJson(`${API}/users/by/username/X?${qs({ 'user.fields': 'public_metrics' })}`, { headers: this.headers(creds) });
     if (!data.data) throw new ApiError('Token accepted but the lookup returned nothing');
     return 'Bearer token is valid. Reading other users\' posts requires the Basic tier or higher.';
@@ -27,6 +76,7 @@ export default {
 
   async fetchAccount(handle, creds, { since, maxPosts }) {
     const username = parseHandle(handle);
+    if (creds.source === 'apify') return fetchViaApify(username, creds, { since, maxPosts });
     const headers = this.headers(creds);
     const ures = await fetchJson(`${API}/users/by/username/${encodeURIComponent(username)}?${qs({ 'user.fields': 'public_metrics,profile_image_url,name,username' })}`, { headers });
     const u = ures.data;

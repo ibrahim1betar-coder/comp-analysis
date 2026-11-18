@@ -1,4 +1,5 @@
 import { fetchJson, qs, ApiError } from '../http.js';
+import { runActor, whoAmI, pick, num, when } from '../apify.js';
 
 const API = 'https://www.googleapis.com/youtube/v3';
 
@@ -24,20 +25,75 @@ export function durationSeconds(iso) {
 
 const n = (v) => (v === undefined || v === null ? null : Number(v));
 
+/** Map one streamers/youtube-scraper item to our post shape. */
+export function mapApifyVideo(v) {
+  const id = pick(v, 'id', 'videoId') || (pick(v, 'url') || '').match(/[?&]v=([\w-]+)/)?.[1];
+  if (!id) return null;
+  const secs = num(pick(v, 'duration')) ?? durationSeconds(pick(v, 'duration') || '') ?? 0;
+  return {
+    externalId: String(id),
+    publishedAt: when(pick(v, 'date', 'publishedAt', 'uploadDate')),
+    type: pick(v, 'isShort') || /shorts\//.test(pick(v, 'url') || '') || (secs > 0 && secs <= 60) ? 'short' : 'video',
+    url: pick(v, 'url') || `https://www.youtube.com/watch?v=${id}`,
+    caption: pick(v, 'title') || '',
+    thumbnailUrl: pick(v, 'thumbnailUrl') || null,
+    views: num(pick(v, 'viewCount', 'views')) ?? 0,
+    likes: num(pick(v, 'likes', 'likeCount')) ?? 0,
+    comments: num(pick(v, 'commentsCount', 'commentCount')) ?? 0,
+    shares: 0,
+    saves: 0,
+  };
+}
+
+function channelUrl(handle) {
+  const q = parseHandle(handle);
+  if (q.id) return `https://www.youtube.com/channel/${q.id}/videos`;
+  if (q.forUsername) return `https://www.youtube.com/user/${q.forUsername}/videos`;
+  return `https://www.youtube.com/@${q.forHandle}/videos`;
+}
+
+async function fetchViaApify(handle, creds, { since, maxPosts }) {
+  const items = await runActor(creds.apifyToken, process.env.APIFY_YOUTUBE_ACTOR || 'streamers/youtube-scraper', {
+    startUrls: [{ url: channelUrl(handle) }], maxResults: maxPosts, maxResultsShorts: maxPosts, maxResultStreams: 0,
+    oldestPostDate: since ? since.slice(0, 10) : undefined, sortVideosBy: 'NEWEST',
+  });
+  if (items[0]?.error) throw new ApiError(`Apify: ${items[0].errorDescription || items[0].error}`, { status: 404 });
+  const posts = items.map(mapApifyVideo).filter((p) => p && p.publishedAt && (!since || p.publishedAt >= since));
+  const first = items[0] || {};
+  const profile = {
+    externalId: pick(first, 'channelId') || handle, displayName: pick(first, 'channelName', 'channelUsername') || handle,
+    avatarUrl: pick(first, 'channelAvatarUrl') || null, profileUrl: pick(first, 'channelUrl') || channelUrl(handle).replace(/\/videos$/, ''),
+    followers: num(pick(first, 'numberOfSubscribers', 'subscriberCount')), following: null, postsCount: num(pick(first, 'channelTotalVideos')), totalViews: num(pick(first, 'channelTotalViews')), totalLikes: null,
+  };
+  if (!posts.length && profile.followers === null) throw new ApiError(`YouTube channel "${handle}" returned no data from Apify`, { status: 404 });
+  return { profile, posts };
+}
+
 export default {
   id: 'youtube',
   name: 'YouTube',
+  source: 'YouTube Data API or Apify',
   capabilities: { views: true, interactions: true, followers: true, shares: false, saves: false },
-  credentialFields: [{ key: 'apiKey', label: 'YouTube Data API v3 key', secret: true, placeholder: 'AIza…' }],
+  credentialFields: [
+    { key: 'source', label: 'Data source', type: 'select', options: [['api', 'YouTube Data API v3 (official, your own API key)'], ['apify', 'Apify (streamers/youtube-scraper)']], secret: false },
+    { key: 'apiKey', label: 'YouTube Data API v3 key', secret: true, placeholder: 'AIza…', showWhen: { source: 'api' } },
+    { key: 'apifyToken', label: 'Apify API token', secret: true, placeholder: 'apify_api_…', shared: 'apify', showWhen: { source: 'apify' } },
+  ],
+  defaultSource: 'api',
   handlePlaceholder: '@handle, channel URL or UC… channel ID',
 
   async test(creds) {
+    if (creds.source === 'apify') {
+      const me = await whoAmI(creds.apifyToken);
+      return `Apify token works (account: ${me.username || me.id}). YouTube videos will be collected with ${process.env.APIFY_YOUTUBE_ACTOR || 'streamers/youtube-scraper'}.`;
+    }
     const data = await fetchJson(`${API}/channels?${qs({ part: 'id', forHandle: 'YouTube', key: creds.apiKey })}`);
     if (!data.items?.length) throw new ApiError('Key accepted but the test lookup returned no channel');
     return 'API key is valid. Quota: 10,000 units/day; one sync of 300 videos costs about 15 units.';
   },
 
   async fetchAccount(handle, creds, { since, maxPosts }) {
+    if (creds.source === 'apify') return fetchViaApify(handle, creds, { since, maxPosts });
     const key = creds.apiKey;
     const lookup = parseHandle(handle);
     const ch = await fetchJson(`${API}/channels?${qs({ part: 'snippet,statistics,contentDetails', ...lookup, key })}`);

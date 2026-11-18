@@ -1,6 +1,7 @@
 /** Facebook Pages via Apify (public data, no Meta app review needed). Default actors: apify/facebook-posts-scraper + apify/facebook-pages-scraper. */
 import { ApiError } from '../http.js';
 import { runActor, whoAmI, pick, num, when } from '../apify.js';
+import { facebookTest, facebookFetch } from './graph.js';
 
 export function parseHandle(input) {
   const h = String(input).trim();
@@ -44,18 +45,25 @@ export function mapPost(p) {
 export default {
   id: 'facebook',
   name: 'Facebook',
-  source: 'Apify',
+  source: 'Apify or Meta Graph API',
   capabilities: { views: true, interactions: true, followers: true, shares: true, saves: false },
-  credentialFields: [{ key: 'apifyToken', label: 'Apify API token', secret: true, placeholder: 'apify_api_…', shared: 'apify' }],
+  capabilitiesFor: (creds) => (creds?.source === 'graph' ? { views: false, interactions: true, followers: true, shares: true, saves: false } : undefined),
+  credentialFields: [
+    { key: 'source', label: 'Data source', type: 'select', options: [['apify', 'Apify (public Pages, no app review)'], ['graph', 'Meta Graph API (official, your own Meta app)']], secret: false },
+    { key: 'apifyToken', label: 'Apify API token', secret: true, placeholder: 'apify_api_…', shared: 'apify', showWhen: { source: 'apify' } },
+    { key: 'accessToken', label: 'Meta access token (long-lived)', secret: true, placeholder: 'EAAG…', showWhen: { source: 'graph' }, hint: 'Filled automatically by "Connect with Facebook" on the Meta card.' },
+  ],
   handlePlaceholder: 'Page username, page ID or page URL',
 
   async test(creds) {
+    if (creds.source === 'graph') return facebookTest(creds);
     const me = await whoAmI(creds.apifyToken);
     return `Apify token works (account: ${me.username || me.id}). Facebook posts, reactions, comments, shares and video views will be collected with ${process.env.APIFY_FACEBOOK_ACTOR || 'apify/facebook-posts-scraper'}.`;
   },
 
   async fetchAccount(handle, creds, { since, maxPosts }) {
     const page = parseHandle(handle);
+    if (creds.source === 'graph') return facebookFetch(page, creds, { since, maxPosts });
     const token = creds.apifyToken;
     const url = pageUrl(page);
     const items = await runActor(token, process.env.APIFY_FACEBOOK_ACTOR || 'apify/facebook-posts-scraper', {

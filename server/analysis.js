@@ -1,5 +1,6 @@
 import { db, stmt } from './db.js';
 import { PLATFORMS, providers } from './providers/index.js';
+import { effectiveCapabilities } from './credentials.js';
 
 /* ---------- caching -------------------------------------------------------- */
 let version = 0;
@@ -289,7 +290,7 @@ export function overview(query) {
     const platformRows = PLATFORMS.filter((p) => !f.platforms.length || f.platforms.includes(p)).map((p) => {
       const agg = byPlatform.get(p) || { posts: 0, views: null, interactions: 0, likes: 0, comments: 0, shares: 0, saves: 0, posts_with_views: 0 };
       return {
-        platform: p, name: providers[p].name, capabilities: providers[p].capabilities,
+        platform: p, name: providers[p].name, capabilities: effectiveCapabilities(p),
         accounts: accounts.filter((a) => a.platform === p).length,
         followers: fNowByPlatform.get(p) ?? null,
         posts: agg.posts, views: agg.views, interactions: agg.interactions, likes: agg.likes, comments: agg.comments, shares: agg.shares, saves: agg.saves,
@@ -363,7 +364,7 @@ export function competitorDetail(id, query) {
         avgInteractions: agg.posts ? agg.interactions / agg.posts : 0,
         avgViews: agg.posts_with_views ? (agg.views || 0) / agg.posts_with_views : null,
         engagementRate: rate(agg.interactions, agg.posts, followers),
-        capabilities: providers[a.platform]?.capabilities,
+        capabilities: effectiveCapabilities(a.platform),
       };
     });
     const current = totals(f);

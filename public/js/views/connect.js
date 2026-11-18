@@ -5,7 +5,7 @@ import { card, platformBadge, empty, PLATFORM_NAMES } from '../components.js';
 
 const GUIDES = {
   youtube: {
-    summary: 'Public data, free, 5 minutes. Views, likes and comments for any channel.',
+    summary: 'Your own YouTube Data API key (default, free) or Apify. Views, likes and comments for any channel.',
     steps: [
       ['Create a Google Cloud project', 'Open console.cloud.google.com, create (or pick) a project.'],
       ['Enable the YouTube Data API v3', 'APIs & Services → Library → search "YouTube Data API v3" → Enable.'],
@@ -17,7 +17,7 @@ const GUIDES = {
     data: 'Subscribers, video views, likes, comments, Shorts vs long-form detection.',
   },
   instagram: {
-    summary: 'Through Apify: public data for any account, including reel and video view counts. No Meta app needed.',
+    summary: 'Apify (default: any public account, reel views included) or the official Meta Graph API via "Connect with Facebook".',
     steps: [
       ['Create an Apify account', 'console.apify.com → Sign up. The free plan includes monthly credits; the Instagram scraper costs about $2.30 per 1,000 posts.'],
       ['Copy your API token', 'Apify Console → Settings → API & Integrations → Personal API tokens → copy (or create) a token.'],
@@ -28,7 +28,7 @@ const GUIDES = {
     data: 'Followers, posts count, likes, comments, reel/video views, media type (reel / video / image / carousel).',
   },
   facebook: {
-    summary: 'Through Apify: public Page posts with reactions, comments, shares and followers. No Meta app review needed.',
+    summary: 'Apify (default: any public Page, no app review) or the official Meta Graph API via "Connect with Facebook".',
     steps: [
       ['Create an Apify account and token', 'Same token as Instagram: console.apify.com → Settings → API & Integrations → Personal API tokens.'],
       ['Link Apify above', 'Once the Apify token is saved, Facebook is linked automatically.'],
@@ -50,7 +50,7 @@ const GUIDES = {
     data: 'Followers, total likes, video count, views, likes, comments, shares, saves per video.',
   },
   x: {
-    summary: 'X API v2 with an app bearer token. Reading other users\' posts requires the Basic tier (paid) or higher.',
+    summary: 'X API v2 bearer token (Basic tier or higher) or Apify.',
     steps: [
       ['Create a developer account and project', 'developer.x.com → Developer Portal → create a project and an app.'],
       ['Choose the Basic tier or higher', 'The Free tier cannot read other accounts\' posts.'],
@@ -101,7 +101,10 @@ export function create(ctx) {
     ctx.setTitle('Connect & settings', 'Connect platforms, add competitors, import data and control collection');
     const [creds, competitors, status, runs] = await Promise.all([get('/api/credentials'), get('/api/competitors'), get('/api/sync/status'), get('/api/sync/runs?limit=25')]);
     const credMap = new Map(creds.map((c) => [c.platform, c]));
-    replace(platformsBox, apifyCard(), ctx.meta.providers.map((p) => platformCard(p, credMap.get(p.id), competitors)));
+    const metaConn = await get('/api/meta/connection').catch(() => ({}));
+    replace(platformsBox, h('div', { class: 'grid cols-2' }, apifyCard(), metaCard(metaConn)), ctx.meta.providers.map((p) => platformCard(p, credMap.get(p.id), competitors)));
+    const params = new URLSearchParams(location.hash.split('?')[1] || '');
+    if (params.get('meta')) { ctx.toast(params.get('msg') || (params.get('meta') === 'ok' ? 'Facebook connected' : 'Facebook connection failed'), params.get('meta') === 'ok' ? 'ok' : 'bad'); history.replaceState(null, '', '#/connect'); }
     replace(syncBox, syncCard(status, competitors));
     replace(importBox, importCard());
     replace(runsBox, card('Recent collection runs', null, runsTable(runs)));
@@ -185,13 +188,13 @@ export function create(ctx) {
     } },
       h('label', { class: 'field' }, 'Apify API token', input, h('span', { class: 'field-hint' }, 'Apify Console → Settings → API & Integrations → Personal API tokens.')),
       h('div', { class: 'actions' },
-        h('button', { class: 'btn primary', type: 'submit' }, linked ? 'Update & test' : 'Link Instagram, Facebook & TikTok'),
+        h('button', { class: 'btn primary', type: 'submit' }, linked ? 'Update & test' : 'Link Apify'),
         linked ? h('button', { class: 'btn danger', type: 'button', onClick: async () => { if (!confirm('Unlink Apify? Instagram, Facebook and TikTok will stop collecting.')) return; await del('/api/credentials/apify'); await ctx.refreshMeta(); update(); } }, 'Unlink') : null,
       ), msg);
     return h('div', { class: 'card platform-card', style: { padding: 0 } },
       h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px', padding: '16px 20px' } },
         h('div', { class: 'brand-mark', style: { background: 'var(--surface-3)', color: 'var(--text)' } }, 'A'),
-        h('div', { class: 'title', style: { flex: 1 } }, h('strong', null, 'Apify'), h('div', { class: 'muted small' }, 'One token links Instagram, Facebook and TikTok. Apify runs the collection; you only paste the token.')),
+        h('div', { class: 'title', style: { flex: 1 } }, h('strong', null, 'Apify'), h('div', { class: 'muted small' }, 'One token for every platform set to the Apify source (Instagram, Facebook and TikTok by default; YouTube and X optionally). Apify runs the collection; you only paste the token.')),
         h('span', { class: `badge ${linked ? 'ok' : 'warn'}` }, icon(linked ? 'check' : 'lock'), linked ? 'Linked' : 'Not linked'),
       ),
       h('div', { class: 'body', style: { gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)' } },
@@ -209,9 +212,52 @@ export function create(ctx) {
     );
   }
 
+
+  function metaCard(conn) {
+    const m = ctx.meta.metaApp;
+    const msg = h('div');
+    const appId = h('input', { class: 'input', placeholder: 'App ID', value: m?.appId || '', autocomplete: 'off' });
+    const secret = h('input', { class: 'input', type: 'password', placeholder: m ? 'App secret saved. Paste a new one to replace it.' : 'App secret', autocomplete: 'off' });
+    const redirect = `${location.origin}/api/oauth/meta/callback`;
+    const form = h('form', { class: 'credential-form', onSubmit: async (e) => {
+      e.preventDefault();
+      try { await put('/api/meta/app', { appId: appId.value, appSecret: secret.value }); ctx.toast('Meta app saved'); await ctx.refreshMeta(); update(); }
+      catch (err) { replace(msg, h('div', { class: 'status-msg bad' }, err.message)); }
+    } },
+      h('div', { class: 'form-row' }, h('label', { class: 'field' }, 'Meta App ID', appId), h('label', { class: 'field' }, 'Meta App Secret', secret)),
+      h('div', { class: 'actions' },
+        h('button', { class: 'btn', type: 'submit' }, m ? 'Update app' : 'Save app'),
+        m ? h('a', { class: 'btn primary', href: '/api/oauth/meta/start' }, icon('facebook'), conn?.user ? 'Reconnect with Facebook' : 'Connect with Facebook') : null,
+        m ? h('button', { class: 'btn ghost sm danger', type: 'button', onClick: async () => { if (!confirm('Remove the Meta app?')) return; await del('/api/meta/app'); await ctx.refreshMeta(); update(); } }, 'Remove') : null,
+      ),
+      conn?.user ? h('div', { class: 'status-msg ok' }, `Connected as ${conn.user} (${relTime(conn.connectedAt)}): ${conn.pages.map((p) => `${p.pageName}${p.igUsername ? ` + @${p.igUsername}` : ''}`).join(', ') || 'no Pages found'}`) : null,
+      msg,
+    );
+    return h('div', { class: 'card platform-card', style: { padding: 0 } },
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px', padding: '16px 20px' } },
+        icon('facebook', 'platform-icon'),
+        h('div', { class: 'title', style: { flex: 1 } }, h('strong', null, 'Meta (official API)'), h('div', { class: 'muted small' }, 'Sign in with your Facebook account to use the Graph API for Facebook and Instagram. Needs a Meta app created once.')),
+        h('span', { class: `badge ${conn?.user ? 'ok' : m ? 'info' : 'warn'}` }, icon(conn?.user ? 'check' : 'lock'), conn?.user ? 'Connected' : m ? 'App saved' : 'Not set up'),
+      ),
+      h('div', { class: 'body', style: { gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)' } },
+        h('div', { class: 'guide' },
+          h('h4', null, 'One-time setup'),
+          h('ol', null,
+            h('li', null, h('strong', null, 'Create a Meta app'), ' — developers.facebook.com → My Apps → Create app → type "Business". Add the products "Facebook Login for Business" and "Instagram Graph API".'),
+            h('li', null, h('strong', null, 'Allow this dashboard as redirect'), ' — Facebook Login → Settings → Valid OAuth Redirect URIs: ', h('code', null, redirect), '. (localhost is accepted while the app is in Development mode.)'),
+            h('li', null, h('strong', null, 'Copy App ID and App Secret'), ' — App settings → Basic. Paste them here and save.'),
+            h('li', null, h('strong', null, 'Click "Connect with Facebook"'), ' — sign in with your own account. The dashboard stores a 60-day token and finds the Instagram professional account linked to your Page, then sets Facebook and Instagram to the Meta Graph API source.'),
+          ),
+          h('div', { class: 'note' }, h('strong', null, 'Limits of the official API: '), 'competitors\' Instagram reels views and Facebook video views are not exposed; reading Pages you do not manage requires the "Page Public Content Access" review. Apify has none of these limits, which is why it stays the default.'),
+        ),
+        h('div', null, h('h4', null, 'Meta app'), form),
+      ),
+    );
+  }
+
   function platformCard(p, saved, competitors) {
     const g = GUIDES[p.id];
-    const connected = Boolean(saved);
+    const connected = Boolean(p.configured);
     const tracked = competitors.flatMap((c) => c.accounts).filter((a) => a.platform === p.id).length;
     const msg = h('div');
     const inputs = {};
@@ -230,12 +276,12 @@ export function create(ctx) {
     } });
     const rows = {};
     const refresh = () => {
-      for (const f of p.credentialFields) if (f.showWhen) rows[f.key].hidden = !Object.entries(f.showWhen).every(([k, v]) => (inputs[k]?.value || 'apify') === v);
+      for (const f of p.credentialFields) if (f.showWhen) rows[f.key].hidden = !Object.entries(f.showWhen).every(([k, v]) => (inputs[k]?.value || p.activeSource) === v);
     };
     for (const f of p.credentialFields) {
       let input;
       if (f.type === 'select') {
-        input = h('select', { class: 'select', onChange: refresh }, f.options.map(([v, l]) => h('option', { value: v, selected: (saved?.fields?.[f.key] || f.options[0][0]) === v ? true : null }, l)));
+        input = h('select', { class: 'select', onChange: refresh }, f.options.map(([v, l]) => h('option', { value: v, selected: (saved?.fields?.[f.key] || p.activeSource || f.options[0][0]) === v ? true : null }, l)));
       } else {
         input = h('input', { class: 'input', type: f.secret ? 'password' : 'text', placeholder: f.placeholder || '', value: saved?.fields?.[f.key] || '', autocomplete: 'off', spellcheck: 'false' });
       }
@@ -253,20 +299,13 @@ export function create(ctx) {
       saved ? h('span', { class: 'muted small' }, `Saved ${relTime(saved.updatedAt)}`) : null,
     ), msg);
 
-    const viaApify = APIFY.has(p.id) && (p.id !== 'tiktok' || (saved?.fields?.source || 'apify') === 'apify');
-    const linked = ctx.meta.sharedApifyToken;
-    const credentialsPane = viaApify && p.id !== 'tiktok'
-      ? h('div', null, h('h4', null, 'Credentials'),
-          h('p', { class: 'small secondary' }, linked ? 'Linked through the Apify token above. Nothing else to configure.' : 'Paste your Apify token in the Apify card above to link this platform.'),
-          linked ? h('div', { class: 'actions', style: { marginTop: '10px' } }, h('button', { class: 'btn', type: 'button', onClick: async () => { replace(msg, h('div', { class: 'status-msg' }, 'Testing…')); const r = await post(`/api/credentials/${p.id}/test`); replace(msg, h('div', { class: `status-msg ${r.ok ? 'ok' : 'bad'}` }, r.message)); } }, 'Test connection')) : null,
-          msg)
-      : h('div', null, h('h4', null, 'Credentials'), form, h('p', { class: 'field-hint', style: { marginTop: '10px' } }, 'Stored encrypted (AES-256-GCM) in the local database. Never sent anywhere except the platform\'s own API.'));
+    const credentialsPane = h('div', null, h('h4', null, 'Credentials'), form, h('p', { class: 'field-hint', style: { marginTop: '10px' } }, 'Stored encrypted (AES-256-GCM) in the local database. Never sent anywhere except the platform\'s own API or Apify.'));
     const cap = (ok, label) => h('span', { class: `badge ${ok ? 'ok' : ''}` }, icon(ok ? 'check' : 'info'), label);
     return h('details', { class: 'card platform-card', open: !connected && p.id === 'youtube' ? true : null },
       h('summary', null,
         icon(p.id, 'platform-icon'),
         h('div', { class: 'title' }, h('strong', null, p.name, h('span', { class: 'badge', style: { marginLeft: '8px', fontWeight: 500 } }, p.source)), h('span', null, g.summary)),
-        h('span', { class: `badge ${connected ? 'ok' : 'warn'}` }, icon(connected ? 'check' : 'lock'), connected ? `Connected · ${tracked} account${tracked === 1 ? '' : 's'}` : 'Not connected'),
+        h('span', { class: `badge ${connected ? 'ok' : 'warn'}` }, icon(connected ? 'check' : 'lock'), connected ? `Connected via ${({ apify: 'Apify', graph: 'Meta API', api: 'official API', research: 'Research API', python: 'Python' })[p.activeSource] || p.activeSource} · ${tracked} account${tracked === 1 ? '' : 's'}` : 'Not connected'),
         icon('chevron', 'chev'),
       ),
       h('div', { class: 'body' },

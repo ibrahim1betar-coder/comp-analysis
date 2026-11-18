@@ -38,35 +38,34 @@ Then open **Connect** in the sidebar:
 
 ## What each platform provides
 
-| Platform | How to connect | Followers | Interactions | Video views |
-|---|---|---|---|---|
-| YouTube | Your own Data API v3 key (free) | ✓ | likes, comments | ✓ |
-| Instagram | Apify token (actors `apify/instagram-scraper` + `apify/instagram-profile-scraper`) | ✓ | likes, comments | ✓ reels and videos |
-| Facebook | Apify token (actors `apify/facebook-posts-scraper` + `apify/facebook-pages-scraper`) | ✓ | reactions, comments, shares | when the actor reports them |
-| TikTok | Apify token (actor `clockworks/tiktok-scraper`), **or** Python + yt-dlp (free, no account), **or** the official Research API | ✓ | likes, comments, shares (saves with Apify) | ✓ |
-| X | API v2 bearer token (Basic tier or higher) | ✓ | likes, replies, reposts + quotes, bookmarks | ✓ video views, else impressions |
+Every platform offers two sources, switchable on the Connect page:
 
-One Apify token covers Instagram, Facebook and TikTok: paste it once in the Apify card on the Connect page.
-Advanced: override the actors with `APIFY_INSTAGRAM_ACTOR`, `APIFY_INSTAGRAM_PROFILE_ACTOR`, `APIFY_FACEBOOK_ACTOR`,
-`APIFY_FACEBOOK_PAGE_ACTOR`, `APIFY_TIKTOK_ACTOR` in `.env`. Where a metric is unavailable the dashboard
-shows **n/a** rather than a misleading zero, and the **CSV import** accepts post-level metrics from any other tool.
+| Platform | Official API | Apify | Followers | Interactions | Video views |
+|---|---|---|---|---|---|
+| YouTube | **Data API v3 key (default)** | `streamers/youtube-scraper` | ✓ | likes, comments | ✓ |
+| Instagram | Meta Graph API via **Connect with Facebook** (Business Discovery; no competitor reel views) | **`apify/instagram-scraper` (default)** | ✓ | likes, comments | ✓ with Apify |
+| Facebook | Meta Graph API via **Connect with Facebook** (needs *Page Public Content Access* for Pages you don't manage) | **`apify/facebook-posts-scraper` (default)** | ✓ | reactions, comments, shares | when reported |
+| TikTok | Research API (approval required) · also **Python + yt-dlp** (free) | **`clockworks/tiktok-scraper` (default)** | ✓ | likes, comments, shares, saves | ✓ |
+| X | **API v2 bearer token (default)** | `apidojo/tweet-scraper` | ✓ | likes, replies, reposts + quotes, bookmarks | ✓ |
 
-### TikTok through Python (yt-dlp)
+One Apify token covers every platform set to Apify: paste it once in the Apify card. Advanced: override actors with
+`APIFY_INSTAGRAM_ACTOR`, `APIFY_INSTAGRAM_PROFILE_ACTOR`, `APIFY_FACEBOOK_ACTOR`, `APIFY_FACEBOOK_PAGE_ACTOR`,
+`APIFY_TIKTOK_ACTOR`, `APIFY_YOUTUBE_ACTOR`, `APIFY_X_ACTOR` in `.env`.
 
-Select "Python (yt-dlp)" as the TikTok data source on the Connect page. Requirements on the machine that runs the dashboard:
+### Connect with Facebook (official Meta API)
 
-```bash
-pip install yt-dlp
-```
+Meta only grants API access through an app, so this is a one-time setup, after which you sign in with your own account:
 
-(Windows: `py -m pip install yt-dlp`; Python 3 from https://www.python.org with "Add Python to PATH" ticked.) The
-dashboard runs `scripts/tiktok_fetch.py`, which reads the video list with yt-dlp's TikTok extractor and the follower
-count from the public profile page. It is free and needs no account, but it is not an official TikTok interface: when
-TikTok changes something, update with `pip install -U yt-dlp`. Set `PYTHON_BIN` in `.env` if Python is not on PATH.
+1. developers.facebook.com → My Apps → Create app (type *Business*) → add **Facebook Login for Business** and **Instagram Graph API**.
+2. Facebook Login → Settings → *Valid OAuth Redirect URIs*: `http://localhost:3000/api/oauth/meta/callback` (or your server's address; localhost is allowed in Development mode).
+3. App settings → Basic → copy **App ID** and **App Secret** into the Meta card on the Connect page.
+4. Click **Connect with Facebook**. The dashboard exchanges the login for a 60-day token, finds the Instagram professional account linked to your Page, and switches Facebook and Instagram to the Graph API source.
 
-Why Apify rather than Meta's and TikTok's own APIs: Meta's Graph API does not expose competitors' reel views
-and needs app review for public Pages, and TikTok has no public API for other accounts' videos. Fetching
-TikTok pages directly would require bypassing TikTok's request signing, which this app deliberately does not do.
+Why no direct username/password login: Facebook, Instagram and TikTok block automated logins (checkpoints, 2FA, suspensions)
+and it would require storing your personal passwords. The official APIs and Apify are the two routes that work reliably.
+
+Where a metric is unavailable the dashboard shows **n/a** rather than a misleading zero, and the **CSV import** accepts
+post-level metrics from any other tool.
 
 ## Configuration
 

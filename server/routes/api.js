@@ -2,7 +2,9 @@ import { createHash } from 'node:crypto';
 import { db, stmt, transaction, nowIso, today, getSetting, setSetting } from '../db.js';
 import { config } from '../config.js';
 import { providers, PLATFORMS, getProvider, normaliseHandle, describeProviders } from '../providers/index.js';
-import { getCredentials, saveCredentials, deleteCredentials, configuredPlatforms, describeCredentials, getShared, saveApifyToken, deleteApifyToken } from '../credentials.js';
+import { getCredentials, saveCredentials, deleteCredentials, configuredPlatforms, describeCredentials, getShared, saveApifyToken, deleteApifyToken, getMetaApp, saveMetaApp, effectiveCapabilities } from '../credentials.js';
+import { oauthUrl, exchangeCode, discoverAccounts, META_SCOPES } from '../providers/graph.js';
+import { sign, safeEqual } from '../crypto.js';
 import { whoAmI } from '../apify.js';
 import { syncAll, syncAccount, syncState, storeAccountData } from '../collector.js';
 import * as analysis from '../analysis.js';
@@ -73,8 +75,9 @@ export default async function routes(app) {
 
   /* ---- meta ---- */
   app.get('/api/meta', async (req) => ({
-    providers: describeProviders(configuredPlatforms()),
+    providers: describeProviders(configuredPlatforms()).map((p) => ({ ...p, capabilities: effectiveCapabilities(p.id), activeSource: (getCredentials(p.id) || {}).source || providers[p.id].defaultSource || 'apify' })),
     sharedApifyToken: Boolean(getShared('apify')),
+    metaApp: (() => { const m = getMetaApp(); return m ? { appId: m.appId, connected: Boolean((getCredentials('facebook', { shared: false }) || {}).accessToken) } : null; })(),
     sync: { intervalMinutes: config.syncIntervalMinutes, lookbackDays: config.lookbackDays, postsPerAccount: config.postsPerAccount, concurrency: config.syncConcurrency },
     stats: analysis.stats(),
     importTemplate: IMPORT_TEMPLATE,
@@ -177,6 +180,40 @@ export default async function routes(app) {
     } catch (e) { return bad(reply, e.message); }
   });
   app.delete('/api/credentials/apify', async () => { deleteApifyToken(); return { ok: true }; });
+
+  /* ---- Meta app + "Connect with Facebook" (OAuth) ---- */
+  app.put('/api/meta/app', async (req, reply) => {
+    try { const m = saveMetaApp(req.body || {}); return { ok: true, appId: m.appId }; } catch (e) { return bad(reply, e.message); }
+  });
+  app.delete('/api/meta/app', async () => { stmt('DELETE FROM credentials WHERE platform = ?').run('meta_app'); return { ok: true }; });
+  const redirectUriFor = (req) => `${req.protocol}://${req.headers.host}/api/oauth/meta/callback`;
+  app.get('/api/oauth/meta/start', async (req, reply) => {
+    const m = getMetaApp();
+    if (!m) return bad(reply, 'Save your Meta App ID and App Secret first');
+    if (req.user?.role !== 'admin') return bad(reply, 'Admins only', 403);
+    const state = `${Date.now()}.${sign(`meta:${Date.now()}`)}`;
+    return reply.redirect(oauthUrl({ appId: m.appId, redirectUri: redirectUriFor(req), state }));
+  });
+  app.get('/api/oauth/meta/callback', async (req, reply) => {
+    const m = getMetaApp();
+    const { code, state, error_description: errDesc, error } = req.query;
+    const back = (msg, ok) => reply.redirect(`/#/connect?meta=${ok ? 'ok' : 'error'}&msg=${encodeURIComponent(msg)}`);
+    if (!m) return back('Meta app is not configured', false);
+    if (error) return back(errDesc || error, false);
+    const [ts, sig] = String(state || '').split('.');
+    if (!ts || !sig || !safeEqual(sig, sign(`meta:${ts}`)) || Date.now() - Number(ts) > 15 * 60_000) return back('Login state expired, try again', false);
+    try {
+      const token = await exchangeCode({ appId: m.appId, appSecret: m.appSecret, redirectUri: redirectUriFor(req), code });
+      const { user, pages } = await discoverAccounts(token);
+      saveCredentials('facebook', { source: 'graph', accessToken: token });
+      const ig = pages.find((p) => p.igUserId);
+      if (ig) saveCredentials('instagram', { source: 'graph', accessToken: token, igUserId: ig.igUserId });
+      setSetting('meta.connection', { user: user.name, pages, connectedAt: nowIso() });
+      analysis.invalidate();
+      return back(`Connected as ${user.name}: ${pages.length} Page(s)${ig ? `, Instagram @${ig.igUsername}` : ', no Instagram professional account linked to your Pages'}`, true);
+    } catch (e) { return back(e.message, false); }
+  });
+  app.get('/api/meta/connection', async () => ({ ...(getSetting('meta.connection', null) || {}), scopes: META_SCOPES }));
   app.put('/api/credentials/:platform', async (req, reply) => {
     const { platform } = req.params;
     if (!PLATFORMS.includes(platform)) return bad(reply, 'Unknown platform', 404);
