@@ -6,7 +6,7 @@ import { getCredentials, saveCredentials, deleteCredentials, configuredPlatforms
 import { whoAmI } from '../apify.js';
 import { syncAll, syncAccount, syncState, storeAccountData } from '../collector.js';
 import * as analysis from '../analysis.js';
-import { overviewInsights, competitorInsights } from '../insights.js';
+import { overviewInsights, competitorInsights, periodSummary, periodLabel } from '../insights.js';
 import { authEnabled, userFromRequest, login, logout, publicUser, listUsers, createUser, setPassword, deleteUser, getUser, countAdmins, verifyUser, refreshCookie } from '../auth.js';
 import { parseCsv, toCsv, IMPORT_TEMPLATE } from '../csv.js';
 
@@ -214,12 +214,12 @@ export default async function routes(app) {
   /* ---- analysis ---- */
   app.get('/api/analysis/overview', async (req, reply) => {
     const data = analysis.overview(req.query);
-    return cached(req, reply, { ...data, insights: overviewInsights(data) });
+    return cached(req, reply, { ...data, insights: overviewInsights(data), summary: periodSummary(data), periodLabel: periodLabel(data.filters) });
   });
   app.get('/api/analysis/competitors/:id', async (req, reply) => {
     const data = analysis.competitorDetail(Number(req.params.id), req.query);
     if (!data) return bad(reply, 'Not found', 404);
-    return cached(req, reply, { ...data, insights: competitorInsights(data) });
+    return cached(req, reply, { ...data, insights: competitorInsights(data), periodLabel: periodLabel(data.filters) });
   });
   app.get('/api/analysis/posts', async (req, reply) => cached(req, reply, analysis.listPosts(req.query)));
   app.get('/api/export/posts.csv', async (req, reply) => {

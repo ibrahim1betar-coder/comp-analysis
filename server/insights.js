@@ -101,3 +101,26 @@ export function competitorInsights(d) {
   }
   return out;
 }
+
+const RANGE_LABEL = { '7d': 'the last 7 days', '30d': 'the last 30 days', '90d': 'the last 90 days', '180d': 'the last 6 months', '365d': 'the last 12 months', all: 'all time' };
+export const periodLabel = (f) => RANGE_LABEL[f.range] || `${f.from.slice(0, 10)} to ${new Date(new Date(f.to).getTime() - 86400_000).toISOString().slice(0, 10)}`;
+
+/** One-paragraph written recap of the selected period across all competitors. */
+export function periodSummary(o) {
+  const t = o.totals;
+  const f = o.filters;
+  const comps = o.competitors.filter((c) => c.posts > 0);
+  if (!t.posts) return `No posts were published by the tracked competitors in ${periodLabel(f)}.`;
+  const parts = [];
+  parts.push(`In ${periodLabel(f)}, ${comps.length} competitor${comps.length === 1 ? '' : 's'} published ${fmt(t.posts)} posts that earned ${fmt(t.interactions)} interactions (${fmt(t.likes)} likes, ${fmt(t.comments)} comments${t.shares ? `, ${fmt(t.shares)} shares` : ''}${t.saves ? `, ${fmt(t.saves)} saves` : ''})${t.views ? ` and ${fmt(t.views)} video views` : ''}.`);
+  const ch = pctChange(t.interactions, t.prev.interactions);
+  if (ch !== null) parts.push(`Interactions are ${ch >= 0 ? 'up' : 'down'} ${Math.abs(ch).toFixed(0)}% against the previous ${f.days} days.`);
+  if (comps.length > 1) {
+    const [a, b] = comps;
+    parts.push(`${a.name} leads with ${fmt(a.interactions)} interactions (${a.shareOfVoice.toFixed(0)}% share of voice), ahead of ${b.name} with ${fmt(b.interactions)} (${b.shareOfVoice.toFixed(0)}%).`);
+    const self = comps.find((c) => c.isSelf);
+    if (self && self !== a) parts.push(`${self.name} ranks #${comps.indexOf(self) + 1} with ${fmt(self.interactions)} interactions (${self.shareOfVoice.toFixed(0)}%).`);
+  }
+  if (t.followers) parts.push(`Combined audience: ${fmt(t.followers)} followers across ${t.accounts} tracked accounts.`);
+  return parts.join(' ');
+}

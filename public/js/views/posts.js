@@ -1,6 +1,6 @@
 import { h, replace, icon } from '../dom.js';
 import { get } from '../api.js';
-import { int } from '../format.js';
+import { compact, int } from '../format.js';
 import { card, postsTable } from '../components.js';
 
 const TYPES = ['video', 'short', 'reel', 'image', 'carousel', 'text', 'link', 'live', 'post'];
@@ -25,8 +25,20 @@ export function create(ctx) {
       const d = await get(`/api/analysis/posts?${qs}`);
       ctx.setTitle('Posts', `${int(d.total)} posts match · sorted by ${state.sort.replace('_', ' ')}`);
       const pages = Math.max(1, Math.ceil(d.total / d.pageSize));
+      const sm = d.sums;
+      const sumsLine = h('div', { class: 'sums' },
+        h('span', null, h('strong', null, int(sm.posts)), ' posts'),
+        h('span', null, h('strong', { title: int(sm.views) }, sm.views === null ? 'n/a' : compact(sm.views)), ' views'),
+        h('span', null, h('strong', { title: int(sm.likes) }, compact(sm.likes)), ' likes'),
+        h('span', null, h('strong', { title: int(sm.comments) }, compact(sm.comments)), ' comments'),
+        h('span', null, h('strong', { title: int(sm.shares) }, compact(sm.shares)), ' shares'),
+        h('span', null, h('strong', { title: int(sm.saves) }, compact(sm.saves)), ' saves'),
+        h('span', null, h('strong', { title: int(sm.interactions) }, compact(sm.interactions)), ' interactions'),
+        h('span', { class: 'muted' }, `· sum of all ${int(d.total)} matching posts in the selected period`),
+      );
       replace(body, card('All posts', 'Click a column to sort. Views show n/a where the platform does not expose competitor view counts.',
         h('div', null,
+          sumsLine,
           postsTable(d.rows, { sort: { key: state.sort, dir: state.dir }, onSort: (key) => { if (state.sort === key) state.dir = state.dir === 'desc' ? 'asc' : 'desc'; else { state.sort = key; state.dir = 'desc'; } state.page = 1; update(); } }),
           h('div', { class: 'pager' },
             h('span', null, `Page ${d.page} of ${pages} · ${int(d.total)} posts`),

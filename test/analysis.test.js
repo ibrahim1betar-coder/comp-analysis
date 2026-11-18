@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { db, stmt } from '../server/db.js';
 import { storeAccountData } from '../server/collector.js';
 import { overview, competitorDetail, listPosts, resolveFilters, invalidate } from '../server/analysis.js';
-import { overviewInsights } from '../server/insights.js';
+import { overviewInsights, periodSummary, periodLabel } from '../server/insights.js';
 
 const DAY = 86400_000;
 const iso = (daysAgo, hour = 12) => new Date(Date.now() - daysAgo * DAY).toISOString().slice(0, 10) + `T${String(hour).padStart(2, '0')}:00:00.000Z`;
@@ -81,6 +81,9 @@ test('platform and competitor filters scope every number', () => {
   const only = overview({ range: '30d', competitors: String(ids.b) });
   assert.equal(only.competitors.length, 1);
   assert.equal(only.totals.interactions, 2000);
+  assert.equal(only.totals.followers, 10000); // followers and accounts respect the competitor filter
+  assert.equal(only.totals.accounts, 1);
+  assert.equal(overview({ range: '30d', platforms: 'youtube' }).totals.followers, 1000);
 });
 
 test('competitor detail breaks down by account, type and weekday', () => {
@@ -105,6 +108,8 @@ test('listPosts sorts, paginates, filters by type and searches captions', () => 
   assert.equal(listPosts({ range: '30d', sort: 'engagement' }).rows[0].id, 'youtube:v1'); // 110/1000 = 11%
   assert.equal(byViews.rows[byViews.rows.length - 1].views, null); // NULLS LAST
   assert.equal(listPosts({ range: '30d', type: 'short' }).total, 1);
+  const sums = listPosts({ range: '30d', pageSize: 10 }).sums; // sums cover every matching post, not just the page
+  assert.deepEqual({ posts: sums.posts, views: sums.views, interactions: sums.interactions, likes: sums.likes }, { posts: 4, views: 21500, interactions: 2385, likes: 1850 });
   assert.equal(listPosts({ range: 'all' }).total, 5);
   assert.equal(listPosts({ range: 'all', pageSize: 10, page: 2 }).rows.length, 0);
   assert.equal(listPosts({ range: 'all', q: '%' }).total, 0); // LIKE wildcard is escaped
@@ -123,4 +128,15 @@ test('insights name the leaders and flag missing view data', () => {
   assert.ok(titles.includes('Beta leads on interactions'));
   assert.ok(titles.includes('Beta wins on video views'));
   assert.ok(!titles.includes('View counts not available everywhere')); // every tracked platform can report views now
+});
+
+test('period summary sums the selected duration and names the leader', () => {
+  const o = overview({ range: '30d' });
+  const text = periodSummary(o);
+  assert.match(text, /In the last 30 days, 2 competitors published 4 posts that earned 2.5K interactions \(1.9K likes, 135 comments, 400 shares\) and 27K video views\./);
+  assert.match(text, /Beta leads with 2.1K interactions/);
+  assert.match(text, /Beta ranks #1|Alpha/);
+  assert.equal(periodLabel({ range: '7d' }), 'the last 7 days');
+  assert.equal(periodLabel({ range: 'custom', from: '2026-10-01T00:00:00.000Z', to: '2026-11-01T00:00:00.000Z' }), '2026-10-01 to 2026-10-31');
+  assert.match(periodSummary(overview({ range: '30d', competitors: '999999' })), /No posts were published/);
 });

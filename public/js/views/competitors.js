@@ -197,13 +197,30 @@ export function createDetail(ctx, id) {
         h('td', { class: 'num' }, compact(a.followers)),
         h('td', { class: 'num' }, a.followerGrowth === null ? '—' : h('span', { class: `delta ${a.followerGrowth >= 0 ? 'up' : 'down'}` }, (a.followerGrowth >= 0 ? '+' : '') + compact(a.followerGrowth))),
         h('td', { class: 'num' }, int(a.posts)),
-        h('td', { class: 'num' }, a.capabilities?.views ? compact(a.views || 0) : h('span', { class: 'muted', title: 'This platform does not expose competitors\' view counts' }, 'n/a')),
+        h('td', { class: 'num' }, a.views === null ? h('span', { class: 'muted', title: 'No view counts reported for these posts' }, 'n/a') : compact(a.views)),
         h('td', { class: 'num' }, a.avgViews === null ? h('span', { class: 'muted' }, 'n/a') : compact(a.avgViews)),
         h('td', { class: 'num' }, h('strong', null, compact(a.interactions))),
         h('td', { class: 'num' }, compact(a.avgInteractions)),
         h('td', { class: 'num' }, a.engagementRate === null ? '—' : pct(a.engagementRate, 2)),
         h('td', null, a.status !== 'demo' && a.status !== 'manual' ? h('button', { class: 'btn ghost sm', title: 'Sync now', onClick: async (e) => { e.currentTarget.disabled = true; const r = await post(`/api/accounts/${a.id}/sync`); ctx.toast(r.ok ? `Synced: ${r.posts} posts` : r.error, r.ok ? 'ok' : 'bad'); await update(); } }, icon('sync')) : null),
-      ))),
+      )),
+      (() => {
+        const t = d.totals;
+        const growth = d.accounts.filter((a) => a.followerGrowth !== null).reduce((s, a) => s + a.followerGrowth, 0);
+        const withViews = d.accounts.reduce((s, a) => s + (a.capabilities?.views ? a.posts : 0), 0);
+        return h('tr', { class: 'total-row' },
+          h('td', null, h('strong', null, `Total (${d.periodLabel})`)), h('td', null, ''),
+          h('td', { class: 'num' }, h('strong', null, compact(t.followers))),
+          h('td', { class: 'num' }, h('strong', { class: `delta ${growth >= 0 ? 'up' : 'down'}` }, (growth >= 0 ? '+' : '') + compact(growth))),
+          h('td', { class: 'num' }, h('strong', null, int(t.posts))),
+          h('td', { class: 'num' }, h('strong', null, t.views === null ? 'n/a' : compact(t.views))),
+          h('td', { class: 'num' }, h('strong', null, withViews && t.views !== null ? compact(t.views / withViews) : '—')),
+          h('td', { class: 'num' }, h('strong', null, compact(t.interactions))),
+          h('td', { class: 'num' }, h('strong', null, compact(t.posts ? t.interactions / t.posts : 0))),
+          h('td', { class: 'num' }, h('strong', null, t.engagementRate === null ? '—' : pct(t.engagementRate, 2))),
+          h('td', null, ''),
+        );
+      })()),
     ));
   }
 

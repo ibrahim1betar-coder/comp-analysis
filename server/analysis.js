@@ -175,7 +175,8 @@ export function overview(query) {
   const f = resolveFilters(query);
   return memo('overview:' + JSON.stringify(f), () => {
     const competitors = stmt(`SELECT id, name, color_slot, is_self FROM competitors ${f.competitorIds.length ? `WHERE id IN (${f.competitorIds.map(() => '?').join(',')})` : ''} ORDER BY id`).all(...f.competitorIds);
-    const accounts = stmt(`SELECT id, competitor_id, platform, handle, display_name, status, last_synced_at, last_error FROM accounts ${f.platforms.length ? `WHERE platform IN (${f.platforms.map(() => '?').join(',')})` : ''}`).all(...f.platforms);
+    const inScopeAccount = (a) => (!f.competitorIds.length || f.competitorIds.includes(a.competitor_id)) && (!f.platforms.length || f.platforms.includes(a.platform));
+    const accounts = stmt('SELECT id, competitor_id, platform, handle, display_name, status, last_synced_at, last_error FROM accounts').all().filter(inScopeAccount);
 
     const current = totals(f);
     const previous = totals(f, { from: f.prevFrom, to: f.prevTo });
@@ -190,8 +191,9 @@ export function overview(query) {
       return { competitorId: Number(cid), platform, posts: r.posts, views: r.views, interactions: r.interactions };
     });
 
-    const followersNow = followersBefore(f.to);
-    const followersStart = followersBefore(f.from);
+    const inScope = (r) => (!f.competitorIds.length || f.competitorIds.includes(r.competitor_id)) && (!f.platforms.length || f.platforms.includes(r.platform));
+    const followersNow = followersBefore(f.to).filter(inScope);
+    const followersStart = followersBefore(f.from).filter(inScope);
     const fNowByComp = sumBy(followersNow, (r) => r.competitor_id, 'followers');
     const fStartByComp = sumBy(followersStart, (r) => r.competitor_id, 'followers');
     const fNowByPlatform = sumBy(followersNow, (r) => r.platform, 'followers');
@@ -327,10 +329,11 @@ export function listPosts(query) {
   const dir = query.dir === 'asc' ? 'ASC' : 'DESC';
   const pageSize = Math.min(200, Math.max(10, Number(query.pageSize) || 50));
   const page = Math.max(1, Number(query.page) || 1);
-  const total = stmt(`SELECT COUNT(*) AS n FROM posts p JOIN accounts a ON a.id = p.account_id WHERE ${sql}`).get(...params).n;
+  const sums = toNum(stmt(`SELECT ${AGG} FROM posts p JOIN accounts a ON a.id = p.account_id WHERE ${sql}`).get(...params));
+  const total = sums.posts;
   const rows = stmt(`SELECT ${POST_SELECT} FROM posts p JOIN accounts a ON a.id = p.account_id JOIN competitors c ON c.id = a.competitor_id
     WHERE ${sql} ORDER BY ${sort} ${dir} NULLS LAST, p.published_at DESC LIMIT ? OFFSET ?`).all(...params, pageSize, (page - 1) * pageSize).map(toNum);
-  return { filters: f, total: Number(total), page, pageSize, rows };
+  return { filters: f, total: Number(total), page, pageSize, rows, sums };
 }
 
 export function exportPosts(query) {
