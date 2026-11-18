@@ -120,6 +120,16 @@ pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fon
 .chip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 .chip .icon { width: 14px; height: 14px; }
 
+/* competitor picker */
+.picker { position: relative; }
+.picker > .btn.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.picker-panel { position: absolute; top: calc(100% + 6px); left: 0; z-index: 30; min-width: 260px; max-height: 360px; overflow: auto; padding: 8px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 2px; }
+.picker-head { display: flex; justify-content: space-between; gap: 10px; padding: 6px 8px 8px; font-weight: 600; font-size: 0.84rem; border-bottom: 1px solid var(--grid); margin-bottom: 4px; }
+.picker-item { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 6px; font-size: 0.88rem; cursor: pointer; }
+.picker-item:hover { background: var(--surface-2); }
+.picker-item .dot { margin: 0; }
+.picker-foot { display: flex; justify-content: space-between; gap: 8px; padding: 8px 4px 2px; border-top: 1px solid var(--grid); margin-top: 4px; }
+
 /* ---------- controls ---------- */
 .btn {
   display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong);

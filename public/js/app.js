@@ -1,7 +1,7 @@
 import { h, replace, icon, $ } from './dom.js';
 import { get, post } from './api.js';
 import { relTime } from './format.js';
-import { destroyAll } from './charts.js';
+import { destroyAll, slotColor } from './charts.js';
 import { PLATFORM_NAMES } from './components.js';
 import * as overview from './views/overview.js';
 import * as competitors from './views/competitors.js';
@@ -132,6 +132,36 @@ async function clearDemo() {
   currentView?.update().catch(showError);
 }
 
+/* ---------- competitor multi-select ---------- */
+let pickerOpen = false;
+function competitorPicker(f) {
+  const selected = new Set(f.competitors);
+  const list = state.competitorList;
+  const names = list.filter((c) => selected.has(String(c.id))).map((c) => c.name);
+  const label = !selected.size ? 'All competitors' : names.length <= 2 ? names.join(' vs ') : `${names.length} competitors`;
+  const wrap = h('div', { class: 'picker' });
+  const btn = h('button', { class: `btn ${selected.size ? 'on' : ''}`, type: 'button', 'aria-haspopup': 'listbox', 'aria-expanded': String(pickerOpen), onClick: () => { pickerOpen = !pickerOpen; renderFilters(); } }, label, icon('chevron'));
+  const items = list.map((c) => {
+    const id = String(c.id);
+    const cb = h('input', { type: 'checkbox', checked: selected.has(id) ? true : null, onChange: () => {
+      const next = cb.checked ? [...f.competitors, id] : f.competitors.filter((x) => x !== id);
+      setFilters({ competitors: next });
+    } });
+    return h('label', { class: 'picker-item' }, cb, h('span', { class: 'dot', style: { background: slotColor(c.slot) } }), c.name, c.isSelf ? h('span', { class: 'badge info' }, 'you') : null);
+  });
+  const panel = h('div', { class: 'picker-panel', role: 'listbox', hidden: !pickerOpen },
+    h('div', { class: 'picker-head' }, 'Compare competitors', h('span', { class: 'muted small' }, 'tick two or more')),
+    items,
+    h('div', { class: 'picker-foot' },
+      h('button', { class: 'btn ghost sm', type: 'button', onClick: () => setFilters({ competitors: [] }) }, 'All competitors'),
+      h('button', { class: 'btn primary sm', type: 'button', onClick: () => { pickerOpen = false; renderFilters(); } }, 'Done'),
+    ),
+  );
+  wrap.append(btn, panel);
+  return wrap;
+}
+document.addEventListener('click', (e) => { if (pickerOpen && !e.target.closest('.picker')) { pickerOpen = false; renderFilters(); } });
+
 /* ---------- filter row ---------- */
 const filtersEl = $('#filters');
 function renderFilters() {
@@ -149,10 +179,9 @@ function renderFilters() {
     const on = f.platforms.includes(p.id);
     return h('button', { class: `chip ${on ? 'on' : ''}`, 'aria-pressed': String(on), onClick: () => setFilters({ platforms: on ? f.platforms.filter((x) => x !== p.id) : [...f.platforms, p.id] }) }, icon(p.id), PLATFORM_NAMES[p.id] || p.name);
   }));
-  const compSel = state.competitorList.length > 1 && state.route !== 'competitors' || (state.route === 'competitors' && !state.param) ? h('select', { class: 'select', 'aria-label': 'Competitors', onChange: (e) => setFilters({ competitors: e.target.value ? [e.target.value] : [] }) },
-    h('option', { value: '' }, 'All competitors'),
-    state.competitorList.map((c) => h('option', { value: String(c.id), selected: f.competitors.length === 1 && f.competitors[0] === String(c.id) ? true : null }, c.name))) : null;
-  replace(filtersEl, range, custom, platformChips, state.route === 'competitors' && state.param ? null : compSel, h('span', { class: 'spacer' }),
+  const showPicker = state.competitorList.length > 1 && !(state.route === 'competitors' && state.param);
+  const compSel = showPicker ? competitorPicker(f) : null;
+  replace(filtersEl, range, custom, platformChips, compSel, h('span', { class: 'spacer' }),
     f.platforms.length || f.competitors.length || f.range !== DEFAULT_RANGE ? h('button', { class: 'btn ghost sm', onClick: () => setFilters({ range: DEFAULT_RANGE, from: '', to: '', platforms: [], competitors: [] }) }, 'Reset filters') : null);
 }
 
