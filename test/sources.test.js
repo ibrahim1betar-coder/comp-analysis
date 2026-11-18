@@ -39,6 +39,10 @@ test('Connect with Facebook: oauth url, code exchange and account discovery', as
   const u = new URL(oauthUrl({ appId: '123', redirectUri: 'http://localhost:3000/api/oauth/meta/callback', state: 's' }));
   assert.equal(u.searchParams.get('client_id'), '123');
   assert.match(u.searchParams.get('scope'), /instagram_basic/);
+  const b = new URL(oauthUrl({ appId: '123', redirectUri: 'r', state: 's', configId: '777' }));
+  assert.equal(b.searchParams.get('config_id'), '777');
+  assert.equal(b.searchParams.get('scope'), null);
+  assert.equal(b.searchParams.get('override_default_response_type'), 'true');
   await withFetch((url) => {
     if (url.includes('fb_exchange_token')) return { access_token: 'LONG' };
     if (url.includes('oauth/access_token')) return { access_token: 'SHORT' };

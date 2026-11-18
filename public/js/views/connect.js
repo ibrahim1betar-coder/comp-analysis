@@ -218,13 +218,17 @@ export function create(ctx) {
     const msg = h('div');
     const appId = h('input', { class: 'input', placeholder: 'App ID', value: m?.appId || '', autocomplete: 'off' });
     const secret = h('input', { class: 'input', type: 'password', placeholder: m ? 'App secret saved. Paste a new one to replace it.' : 'App secret', autocomplete: 'off' });
+    const configId = h('input', { class: 'input', placeholder: 'Only for "Facebook Login for Business" apps', value: m?.configId || '', autocomplete: 'off' });
     const redirect = `${location.origin}/api/oauth/meta/callback`;
+    const copyBtn = h('button', { class: 'btn sm', type: 'button', onClick: async () => { try { await navigator.clipboard.writeText(redirect); ctx.toast('Redirect URI copied'); } catch { prompt('Copy this redirect URI:', redirect); } } }, 'Copy');
     const form = h('form', { class: 'credential-form', onSubmit: async (e) => {
       e.preventDefault();
-      try { await put('/api/meta/app', { appId: appId.value, appSecret: secret.value }); ctx.toast('Meta app saved'); await ctx.refreshMeta(); update(); }
+      try { await put('/api/meta/app', { appId: appId.value, appSecret: secret.value, configId: configId.value }); ctx.toast('Meta app saved'); await ctx.refreshMeta(); update(); }
       catch (err) { replace(msg, h('div', { class: 'status-msg bad' }, err.message)); }
     } },
+      h('div', { class: 'field' }, 'Redirect URI to whitelist in your Meta app', h('div', { class: 'actions' }, h('code', { style: { padding: '6px 8px', fontSize: '0.8rem' } }, redirect), copyBtn)),
       h('div', { class: 'form-row' }, h('label', { class: 'field' }, 'Meta App ID', appId), h('label', { class: 'field' }, 'Meta App Secret', secret)),
+      h('label', { class: 'field' }, 'Login configuration ID (optional)', configId, h('span', { class: 'field-hint' }, 'Apps that show "Facebook Login for Business" need a configuration: Facebook Login for Business → Configurations → Create → add the Page and Instagram permissions → copy its ID.')),
       h('div', { class: 'actions' },
         h('button', { class: 'btn', type: 'submit' }, m ? 'Update app' : 'Save app'),
         m ? h('a', { class: 'btn primary', href: '/api/oauth/meta/start' }, icon('facebook'), conn?.user ? 'Reconnect with Facebook' : 'Connect with Facebook') : null,
@@ -244,7 +248,7 @@ export function create(ctx) {
           h('h4', null, 'One-time setup'),
           h('ol', null,
             h('li', null, h('strong', null, 'Create a Meta app'), ' — developers.facebook.com → My Apps → Create app → type "Business". Add the products "Facebook Login for Business" and "Instagram Graph API".'),
-            h('li', null, h('strong', null, 'Allow this dashboard as redirect'), ' — Facebook Login → Settings → Valid OAuth Redirect URIs: ', h('code', null, redirect), '. (localhost is accepted while the app is in Development mode.)'),
+            h('li', null, h('strong', null, 'Allow this dashboard as redirect'), ' — Facebook Login (for Business) → Settings: set ', h('strong', null, 'Client OAuth login = Yes'), ', ', h('strong', null, 'Web OAuth login = Yes'), ', and add ', h('code', null, redirect), ' to ', h('strong', null, 'Valid OAuth Redirect URIs'), ' exactly as shown (use the Copy button). Save changes. If Facebook says "URL blocked", this step is missing or the address differs (port, http vs https, localhost vs 127.0.0.1).'),
             h('li', null, h('strong', null, 'Copy App ID and App Secret'), ' — App settings → Basic. Paste them here and save.'),
             h('li', null, h('strong', null, 'Click "Connect with Facebook"'), ' — sign in with your own account. The dashboard stores a 60-day token and finds the Instagram professional account linked to your Page, then sets Facebook and Instagram to the Meta Graph API source.'),
           ),

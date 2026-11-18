@@ -71,9 +71,13 @@ export function getMetaApp() {
   const row = stmt('SELECT payload FROM credentials WHERE platform = ?').get('meta_app');
   return row ? decryptJson(row.payload) : null;
 }
-export function saveMetaApp({ appId, appSecret }) {
+export function saveMetaApp({ appId, appSecret, configId }) {
   const existing = getMetaApp() || {};
-  const clean = { appId: String(appId || existing.appId || '').trim(), appSecret: (!appSecret || String(appSecret).startsWith('••')) ? existing.appSecret : String(appSecret).trim() };
+  const clean = {
+    appId: String(appId || existing.appId || '').trim(),
+    appSecret: (!appSecret || String(appSecret).startsWith('••')) ? existing.appSecret : String(appSecret).trim(),
+    configId: configId === undefined ? existing.configId || '' : String(configId).trim(),
+  };
   if (!clean.appId || !clean.appSecret) throw new Error('App ID and App Secret are required');
   stmt('INSERT INTO credentials (platform, payload, updated_at) VALUES (?, ?, ?) ON CONFLICT(platform) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at').run('meta_app', encryptJson(clean), nowIso());
   return clean;

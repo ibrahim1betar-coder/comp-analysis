@@ -77,7 +77,7 @@ export default async function routes(app) {
   app.get('/api/meta', async (req) => ({
     providers: describeProviders(configuredPlatforms()).map((p) => ({ ...p, capabilities: effectiveCapabilities(p.id), activeSource: (getCredentials(p.id) || {}).source || providers[p.id].defaultSource || 'apify' })),
     sharedApifyToken: Boolean(getShared('apify')),
-    metaApp: (() => { const m = getMetaApp(); return m ? { appId: m.appId, connected: Boolean((getCredentials('facebook', { shared: false }) || {}).accessToken) } : null; })(),
+    metaApp: (() => { const m = getMetaApp(); return m ? { appId: m.appId, configId: m.configId || '', connected: Boolean((getCredentials('facebook', { shared: false }) || {}).accessToken) } : null; })(),
     sync: { intervalMinutes: config.syncIntervalMinutes, lookbackDays: config.lookbackDays, postsPerAccount: config.postsPerAccount, concurrency: config.syncConcurrency },
     stats: analysis.stats(),
     importTemplate: IMPORT_TEMPLATE,
@@ -192,7 +192,7 @@ export default async function routes(app) {
     if (!m) return bad(reply, 'Save your Meta App ID and App Secret first');
     if (req.user?.role !== 'admin') return bad(reply, 'Admins only', 403);
     const state = `${Date.now()}.${sign(`meta:${Date.now()}`)}`;
-    return reply.redirect(oauthUrl({ appId: m.appId, redirectUri: redirectUriFor(req), state }));
+    return reply.redirect(oauthUrl({ appId: m.appId, redirectUri: redirectUriFor(req), state, configId: m.configId }));
   });
   app.get('/api/oauth/meta/callback', async (req, reply) => {
     const m = getMetaApp();

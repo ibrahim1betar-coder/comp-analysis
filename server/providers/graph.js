@@ -92,8 +92,12 @@ export async function facebookFetch(page, creds, { since, maxPosts }) {
 }
 
 /** OAuth helpers for "Connect with Facebook". */
-export function oauthUrl({ appId, redirectUri, state }) {
-  return `https://www.facebook.com/${GRAPH_VERSION}/dialog/oauth?${qs({ client_id: appId, redirect_uri: redirectUri, state, scope: META_SCOPES.join(','), response_type: 'code' })}`;
+export function oauthUrl({ appId, redirectUri, state, configId }) {
+  // "Facebook Login for Business" apps use a login configuration (config_id) instead of a scope list.
+  const params = configId
+    ? { client_id: appId, redirect_uri: redirectUri, state, config_id: configId, response_type: 'code', override_default_response_type: 'true' }
+    : { client_id: appId, redirect_uri: redirectUri, state, scope: META_SCOPES.join(','), response_type: 'code' };
+  return `https://www.facebook.com/${GRAPH_VERSION}/dialog/oauth?${qs(params)}`;
 }
 export async function exchangeCode({ appId, appSecret, redirectUri, code }) {
   const short = await fetchJson(`${GRAPH}/oauth/access_token?${qs({ client_id: appId, client_secret: appSecret, redirect_uri: redirectUri, code })}`);
