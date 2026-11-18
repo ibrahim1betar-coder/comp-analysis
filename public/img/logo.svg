@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 60" role="img" aria-label="LIME">
+  <!-- L -->
+  <path fill="#ffffff" d="M6 10h12v29h17v11H6z"/>
+  <!-- I (lime) -->
+  <rect fill="#c8f135" x="43" y="10" width="12" height="40"/>
+  <!-- M -->
+  <path fill="#ffffff" d="M63 10h12l13 18 13-18h12v40h-11V28L88 44 74 28v22H63z"/>
+  <!-- E -->
+  <path fill="#ffffff" d="M121 10h32v10h-20v5h18v10h-18v5h20v10h-32z"/>
+</svg>
