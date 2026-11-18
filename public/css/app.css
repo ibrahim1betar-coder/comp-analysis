@@ -312,6 +312,11 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .dropzone { border: 1.5px dashed var(--border-strong); border-radius: var(--radius-sm); padding: 18px; text-align: center; color: var(--text-muted); font-size: 0.86rem; cursor: pointer; }
 .dropzone.over { border-color: var(--accent); background: var(--accent-soft); }
 
+/* manual meta flow */
+.manual-flow { margin-top: 6px; border-top: 1px solid var(--grid); padding-top: 10px; }
+.manual-flow > summary { cursor: pointer; font-size: 0.86rem; color: var(--accent); font-weight: 500; }
+.manual-flow .actions .input { flex: 1; min-width: 200px; }
+
 /* login */
 .login { min-height: 100vh; display: grid; place-items: center; padding: 20px; }
 .login .card { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 14px; }

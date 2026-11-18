@@ -3,6 +3,8 @@ import { fetchJson, qs, ApiError } from '../http.js';
 
 export const GRAPH_VERSION = 'v21.0';
 export const GRAPH = `https://graph.facebook.com/${GRAPH_VERSION}`;
+/** Facebook's built-in redirect for manual / desktop login flows: accepted without whitelisting. */
+export const MANUAL_REDIRECT = 'https://www.facebook.com/connect/login_success.html';
 export const META_SCOPES = ['pages_show_list', 'pages_read_engagement', 'instagram_basic', 'instagram_manage_insights', 'business_management'];
 
 const igType = (m) => {
@@ -110,4 +112,19 @@ export async function discoverAccounts(accessToken) {
   const pages = await fetchJson(`${GRAPH}/me/accounts?${qs({ fields: 'id,name,instagram_business_account{id,username}', limit: 100, access_token: accessToken })}`);
   const list = (pages.data || []).map((p) => ({ pageId: p.id, pageName: p.name, igUserId: p.instagram_business_account?.id || null, igUsername: p.instagram_business_account?.username || null }));
   return { user: me, pages: list };
+}
+
+/** Pull the `code` (and `state`) out of the Success page address the user pasted. Accepts a bare code too. */
+export function parsePastedRedirect(text) {
+  const t = String(text || '').trim();
+  if (!t) return {};
+  try {
+    const u = new URL(t);
+    const code = u.searchParams.get('code') || new URLSearchParams(u.hash.replace(/^#/, '')).get('code');
+    const state = u.searchParams.get('state') || new URLSearchParams(u.hash.replace(/^#/, '')).get('state');
+    const error = u.searchParams.get('error_description') || u.searchParams.get('error');
+    return { code, state, error };
+  } catch {
+    return /^[\w-]+$/.test(t) ? { code: t } : {};
+  }
 }

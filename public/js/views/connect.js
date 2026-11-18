@@ -236,7 +236,29 @@ export function create(ctx) {
       ),
       conn?.user ? h('div', { class: 'status-msg ok' }, `Connected as ${conn.user} (${relTime(conn.connectedAt)}): ${conn.pages.map((p) => `${p.pageName}${p.igUsername ? ` + @${p.igUsername}` : ''}`).join(', ') || 'no Pages found'}`) : null,
       msg,
+      m ? manualFlow() : null,
     );
+    function manualFlow() {
+      const pasted = h('input', { class: 'input', placeholder: 'https://www.facebook.com/connect/login_success.html?code=…', autocomplete: 'off', spellcheck: 'false' });
+      const result = h('div');
+      return h('details', { class: 'manual-flow' },
+        h('summary', null, 'Getting "URL blocked"? Connect without whitelisting instead'),
+        h('ol', { class: 'small secondary', style: { paddingLeft: '18px', margin: '8px 0', display: 'grid', gap: '4px' } },
+          h('li', null, 'Click ', h('strong', null, 'Open Facebook login'), ' and sign in. You will land on a Facebook page that says "Success".'),
+          h('li', null, 'Copy the full address from your browser\'s address bar on that page and paste it below.'),
+          h('li', null, 'Click ', h('strong', null, 'Finish connection'), '.'),
+        ),
+        h('div', { class: 'actions' },
+          h('button', { class: 'btn', type: 'button', onClick: async () => { try { const r = await get('/api/oauth/meta/manual-url'); window.open(r.url, '_blank', 'noopener'); } catch (err) { replace(result, h('div', { class: 'status-msg bad' }, err.message)); } } }, icon('facebook'), 'Open Facebook login'),
+        ),
+        h('div', { class: 'actions', style: { marginTop: '8px' } }, pasted, h('button', { class: 'btn primary', type: 'button', onClick: async () => {
+          replace(result, h('div', { class: 'status-msg' }, 'Connecting…'));
+          try { const r = await post('/api/oauth/meta/manual', { url: pasted.value }); replace(result, h('div', { class: 'status-msg ok' }, r.message)); ctx.toast('Facebook connected'); await ctx.refreshMeta(); update(); }
+          catch (err) { replace(result, h('div', { class: 'status-msg bad' }, err.message)); }
+        } }, 'Finish connection')),
+        result,
+      );
+    }
     return h('div', { class: 'card platform-card', style: { padding: 0 } },
       h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px', padding: '16px 20px' } },
         icon('facebook', 'platform-icon'),

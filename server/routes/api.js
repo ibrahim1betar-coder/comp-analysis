@@ -3,7 +3,7 @@ import { db, stmt, transaction, nowIso, today, getSetting, setSetting } from '..
 import { config } from '../config.js';
 import { providers, PLATFORMS, getProvider, normaliseHandle, describeProviders } from '../providers/index.js';
 import { getCredentials, saveCredentials, deleteCredentials, configuredPlatforms, describeCredentials, getShared, saveApifyToken, deleteApifyToken, getMetaApp, saveMetaApp, effectiveCapabilities } from '../credentials.js';
-import { oauthUrl, exchangeCode, discoverAccounts, META_SCOPES } from '../providers/graph.js';
+import { oauthUrl, exchangeCode, discoverAccounts, META_SCOPES, MANUAL_REDIRECT, parsePastedRedirect } from '../providers/graph.js';
 import { sign, safeEqual } from '../crypto.js';
 import { whoAmI } from '../apify.js';
 import { syncAll, syncAccount, syncState, storeAccountData } from '../collector.js';
@@ -202,18 +202,41 @@ export default async function routes(app) {
     if (error) return back(errDesc || error, false);
     const [ts, sig] = String(state || '').split('.');
     if (!ts || !sig || !safeEqual(sig, sign(`meta:${ts}`)) || Date.now() - Number(ts) > 15 * 60_000) return back('Login state expired, try again', false);
-    try {
-      const token = await exchangeCode({ appId: m.appId, appSecret: m.appSecret, redirectUri: redirectUriFor(req), code });
-      const { user, pages } = await discoverAccounts(token);
-      saveCredentials('facebook', { source: 'graph', accessToken: token });
-      const ig = pages.find((p) => p.igUserId);
-      if (ig) saveCredentials('instagram', { source: 'graph', accessToken: token, igUserId: ig.igUserId });
-      setSetting('meta.connection', { user: user.name, pages, connectedAt: nowIso() });
-      analysis.invalidate();
-      return back(`Connected as ${user.name}: ${pages.length} Page(s)${ig ? `, Instagram @${ig.igUsername}` : ', no Instagram professional account linked to your Pages'}`, true);
-    } catch (e) { return back(e.message, false); }
+    try { return back(await finishMetaLogin(code, redirectUriFor(req)), true); }
+    catch (e) { return back(e.message, false); }
   });
   app.get('/api/meta/connection', async () => ({ ...(getSetting('meta.connection', null) || {}), scopes: META_SCOPES }));
+
+  /** Manual flow (no redirect whitelisting): Facebook redirects to its own login_success.html; the user pastes that address here. */
+  async function finishMetaLogin(code, redirectUri) {
+    const m = getMetaApp();
+    const token = await exchangeCode({ appId: m.appId, appSecret: m.appSecret, redirectUri, code });
+    const { user, pages } = await discoverAccounts(token);
+    saveCredentials('facebook', { source: 'graph', accessToken: token });
+    const ig = pages.find((p) => p.igUserId);
+    if (ig) saveCredentials('instagram', { source: 'graph', accessToken: token, igUserId: ig.igUserId });
+    setSetting('meta.connection', { user: user.name, pages, connectedAt: nowIso() });
+    analysis.invalidate();
+    return `Connected as ${user.name}: ${pages.length} Page(s)${ig ? `, Instagram @${ig.igUsername}` : ', no Instagram professional account linked to your Pages'}`;
+  }
+  app.get('/api/oauth/meta/manual-url', async (req, reply) => {
+    const m = getMetaApp();
+    if (!m) return bad(reply, 'Save your Meta App ID and App Secret first');
+    const state = `${Date.now()}.${sign(`meta:${Date.now()}`)}`;
+    return { url: oauthUrl({ appId: m.appId, redirectUri: MANUAL_REDIRECT, state, configId: m.configId }), redirectUri: MANUAL_REDIRECT };
+  });
+  app.post('/api/oauth/meta/manual', async (req, reply) => {
+    if (!getMetaApp()) return bad(reply, 'Save your Meta App ID and App Secret first');
+    const { code, state, error } = parsePastedRedirect(req.body?.url || req.body?.code);
+    if (error) return bad(reply, `Facebook returned: ${error}`);
+    if (!code) return bad(reply, 'No login code found. Paste the full address of the Facebook "Success" page (it contains code=...)');
+    if (state) {
+      const [ts, sig] = String(state).split('.');
+      if (!ts || !sig || !safeEqual(sig, sign(`meta:${ts}`)) || Date.now() - Number(ts) > 30 * 60_000) return bad(reply, 'This login link expired (30 minutes). Open the Facebook login again.');
+    }
+    try { return { ok: true, message: await finishMetaLogin(code, MANUAL_REDIRECT) }; }
+    catch (e) { return bad(reply, `Facebook rejected the code: ${e.message}`); }
+  });
   app.put('/api/credentials/:platform', async (req, reply) => {
     const { platform } = req.params;
     if (!PLATFORMS.includes(platform)) return bad(reply, 'Unknown platform', 404);

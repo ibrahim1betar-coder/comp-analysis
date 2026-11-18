@@ -1,7 +1,7 @@
 import './helpers.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { instagramFetch, facebookFetch, oauthUrl, exchangeCode, discoverAccounts } from '../server/providers/graph.js';
+import { instagramFetch, facebookFetch, oauthUrl, exchangeCode, discoverAccounts, parsePastedRedirect, MANUAL_REDIRECT } from '../server/providers/graph.js';
 import youtube, { mapApifyVideo } from '../server/providers/youtube.js';
 import x, { mapApifyTweet } from '../server/providers/x.js';
 import instagram from '../server/providers/instagram.js';
@@ -54,6 +54,10 @@ test('Connect with Facebook: oauth url, code exchange and account discovery', as
     assert.equal(d.user.name, 'Me');
     assert.equal(d.pages.find((p) => p.igUserId).igUsername, 'mybrand');
   });
+  assert.deepEqual(parsePastedRedirect(`${MANUAL_REDIRECT}?code=AQBx-1&state=1.abc#_=_`), { code: 'AQBx-1', state: '1.abc', error: null });
+  assert.equal(parsePastedRedirect('AQBx-1').code, 'AQBx-1');
+  assert.equal(parsePastedRedirect(`${MANUAL_REDIRECT}?error=access_denied&error_description=Permissions+error`).error, 'Permissions error');
+  assert.deepEqual(parsePastedRedirect('not a url with spaces'), {});
   assert.throws(() => saveMetaApp({ appId: '', appSecret: '' }), /required/);
   saveMetaApp({ appId: '123', appSecret: 'sec' });
   saveMetaApp({ appId: '123', appSecret: '••••••' }); // masked value keeps the secret
