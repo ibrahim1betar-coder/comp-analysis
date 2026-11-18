@@ -54,7 +54,7 @@ export default {
   async fetchAccount(handle, creds, { since, maxPosts }) {
     const username = parseHandle(handle);
     const token = creds.apifyToken;
-    const limit = Math.min(maxPosts, 200);
+    const limit = maxPosts;
 
     // 1) Posts (one actor run). resultsType "posts" walks the profile feed newest-first.
     const items = await runActor(token, process.env.APIFY_INSTAGRAM_ACTOR || 'apify/instagram-scraper', {

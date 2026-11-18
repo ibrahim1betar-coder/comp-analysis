@@ -38,7 +38,7 @@ export const config = {
   syncIntervalMinutes: num(process.env.SYNC_INTERVAL_MINUTES, 360),
   syncConcurrency: Math.max(1, num(process.env.SYNC_CONCURRENCY, 3)),
   lookbackDays: Math.max(1, num(process.env.LOOKBACK_DAYS, 90)),
-  postsPerAccount: Math.max(10, num(process.env.POSTS_PER_ACCOUNT, 300)),
+  postsPerAccount: Math.max(10, num(process.env.POSTS_PER_ACCOUNT, 1000)),
   allowAnonImport: process.env.ALLOW_ANON_IMPORT === '1',
   isProduction: process.env.NODE_ENV === 'production',
 };

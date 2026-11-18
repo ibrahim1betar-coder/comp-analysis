@@ -170,6 +170,20 @@ function topPosts(f, { by = 'interactions', limit = 10 } = {}) {
 const rate = (interactions, posts, followers) => (posts && followers ? (interactions / posts / followers) * 100 : null);
 const pct = (part, whole) => (whole ? (part / whole) * 100 : 0);
 
+/**
+ * Is the selected period fully covered by the stored posts of an account?
+ * 'full'    : the oldest stored post is older than the period start, or every post the profile has is stored.
+ * 'partial' : the account has more posts than we stored and the oldest stored post is inside the period,
+ *             so older posts inside the period may be missing (raise POSTS_PER_ACCOUNT, run a full re-sync).
+ * 'none'    : nothing stored yet.
+ */
+export function coverageOf({ postsTotal, oldestPostAt, profilePostsCount, status }, f) {
+  if (!postsTotal) return status === 'pending' ? 'none' : 'none';
+  if (profilePostsCount !== null && profilePostsCount !== undefined && postsTotal >= profilePostsCount) return 'full';
+  if (oldestPostAt && oldestPostAt <= f.from) return 'full';
+  return 'partial';
+}
+
 /* ---------- public API ----------------------------------------------------- */
 export function overview(query) {
   const f = resolveFilters(query);
@@ -255,6 +269,15 @@ export function overview(query) {
       topPosts: topPosts(f, { by: 'interactions', limit: 10 }),
       topViewed: topPosts(f, { by: 'views', limit: 10 }),
       accountIssues: accounts.filter((a) => a.status === 'error').map((a) => ({ id: a.id, platform: a.platform, handle: a.handle, error: a.last_error })),
+      coverageIssues: (() => {
+        const ids = accounts.map((a) => a.id);
+        if (!ids.length) return [];
+        const rows = stmt(`SELECT a.id, a.platform, a.handle, COUNT(p.id) AS posts_total, MIN(p.published_at) AS oldest_post_at
+          FROM accounts a LEFT JOIN posts p ON p.account_id = a.id WHERE a.id IN (${ids.map(() => '?').join(',')}) GROUP BY a.id`).all(...ids).map(toNum);
+        const profileCounts = new Map(followersNow.map((r) => [r.account_id, r.posts_count]));
+        return rows.filter((r) => r.posts_total && coverageOf({ postsTotal: r.posts_total, oldestPostAt: r.oldest_post_at, profilePostsCount: profileCounts.get(r.id) ?? null }, f) === 'partial')
+          .map((r) => ({ id: r.id, platform: r.platform, handle: r.handle, postsTotal: r.posts_total, oldestPostAt: r.oldest_post_at, profilePostsCount: profileCounts.get(r.id) ?? null }));
+      })(),
       hasDemoData: Boolean(stmt(`SELECT 1 FROM accounts WHERE status = 'demo' LIMIT 1`).get()),
       lastSync,
     };
@@ -266,7 +289,10 @@ export function competitorDetail(id, query) {
   if (!competitor) return null;
   const f = resolveFilters({ ...query, competitors: String(id) });
   return memo('competitor:' + JSON.stringify(f), () => {
-    const accounts = stmt('SELECT a.*, (SELECT COUNT(*) FROM posts p WHERE p.account_id = a.id) AS posts_total FROM accounts a WHERE a.competitor_id = ? ORDER BY a.platform').all(id);
+    const accounts = stmt(`SELECT a.*, (SELECT COUNT(*) FROM posts p WHERE p.account_id = a.id) AS posts_total,
+      (SELECT MIN(published_at) FROM posts p WHERE p.account_id = a.id) AS oldest_post_at,
+      (SELECT MAX(published_at) FROM posts p WHERE p.account_id = a.id) AS newest_post_at
+      FROM accounts a WHERE a.competitor_id = ? ORDER BY a.platform`).all(id);
     const byAccount = new Map(groupBy(f, 'a.id', 'grp').map((r) => [r.grp, r]));
     const fNow = new Map(followersBefore(f.to).map((r) => [r.account_id, r]));
     const fStart = new Map(followersBefore(f.from).map((r) => [r.account_id, r]));
@@ -277,6 +303,8 @@ export function competitorDetail(id, query) {
       return {
         id: a.id, platform: a.platform, platformName: providers[a.platform]?.name || a.platform, handle: a.handle, displayName: a.display_name,
         avatarUrl: a.avatar_url, profileUrl: a.profile_url, status: a.status, lastSyncedAt: a.last_synced_at, lastError: a.last_error, postsTotal: Number(a.posts_total),
+        oldestPostAt: a.oldest_post_at, newestPostAt: a.newest_post_at, profilePostsCount: fNow.get(a.id)?.posts_count ?? null,
+        coverage: coverageOf({ postsTotal: Number(a.posts_total), oldestPostAt: a.oldest_post_at, profilePostsCount: fNow.get(a.id)?.posts_count ?? null, status: a.status }, f),
         followers, followerGrowth: followers !== null && startF !== null ? followers - startF : null,
         totalViews: fNow.get(a.id)?.total_views ?? null,
         posts: agg.posts, views: agg.views, interactions: agg.interactions, likes: agg.likes, comments: agg.comments, shares: agg.shares, saves: agg.saves,

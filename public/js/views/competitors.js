@@ -201,13 +201,27 @@ export function createDetail(ctx, id) {
     return h('div', { class: 'tabs' }, mk('interactions', 'By interactions'), mk('views', 'By views'));
   }
 
+  function coverageCell(a) {
+    const stored = a.postsTotal || 0;
+    const of = a.profilePostsCount ? ` of ${int(a.profilePostsCount)}` : '';
+    const back = a.oldestPostAt ? `back to ${new Date(a.oldestPostAt).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}` : '';
+    const fullBtn = h('button', { class: 'btn ghost sm', title: 'Re-collect everything for this account (newest POSTS_PER_ACCOUNT posts)', onClick: async (e) => {
+      e.currentTarget.disabled = true; ctx.toast('Full re-sync started…');
+      const r = await post(`/api/accounts/${a.id}/sync`, { full: true }); ctx.toast(r.ok ? `Collected ${r.posts} posts` : r.error, r.ok ? 'ok' : 'bad'); await update();
+    } }, 'Full re-sync');
+    if (a.coverage === 'none') return h('span', { class: 'badge warn' }, 'No posts yet');
+    if (a.coverage === 'partial') return h('div', null, h('span', { class: 'badge warn', title: 'Older posts inside the selected period may be missing' }, icon('warn'), 'Partial'), h('div', { class: 'small muted' }, `${int(stored)}${of} posts, ${back}`), a.status !== 'demo' && a.status !== 'manual' ? fullBtn : null);
+    return h('div', null, h('span', { class: 'badge ok', title: 'Stored posts reach back before the start of the selected period' }, icon('check'), 'Complete'), h('div', { class: 'small muted' }, `${int(stored)}${of} posts, ${back}`));
+  }
+
   function accountsTable(d) {
     if (!d.accounts.length) return empty('No accounts attached. Add one on the Competitors page.');
     return h('div', { class: 'table-wrap' }, h('table', null,
-      h('thead', null, h('tr', null, h('th', null, 'Account'), h('th', null, 'Status'), h('th', { class: 'num' }, 'Followers'), h('th', { class: 'num' }, 'Growth'), h('th', { class: 'num' }, 'Posts'), h('th', { class: 'num' }, 'Views'), h('th', { class: 'num' }, 'Avg views'), h('th', { class: 'num' }, 'Interactions'), h('th', { class: 'num' }, 'Per post'), h('th', { class: 'num' }, 'Eng. rate'), h('th', null, ''))),
+      h('thead', null, h('tr', null, h('th', null, 'Account'), h('th', null, 'Status'), h('th', null, 'Coverage'), h('th', { class: 'num' }, 'Followers'), h('th', { class: 'num' }, 'Growth'), h('th', { class: 'num' }, 'Posts'), h('th', { class: 'num' }, 'Views'), h('th', { class: 'num' }, 'Avg views'), h('th', { class: 'num' }, 'Interactions'), h('th', { class: 'num' }, 'Per post'), h('th', { class: 'num' }, 'Eng. rate'), h('th', null, ''))),
       h('tbody', null, d.accounts.map((a) => h('tr', null,
         h('td', null, h('div', { class: 'post-cell' }, a.avatarUrl ? h('img', { class: 'thumb', src: a.avatarUrl, alt: '', style: { width: '32px', height: '32px', borderRadius: '50%' }, referrerpolicy: 'no-referrer' }) : platformBadge(a.platform, { label: false }), h('div', null, h('div', null, a.profileUrl ? h('a', { href: a.profileUrl, target: '_blank', rel: 'noopener noreferrer' }, at(a.handle)) : at(a.handle)), h('div', { class: 'meta' }, a.platformName)))),
         h('td', null, statusBadge(a.status, a.lastError), a.lastError ? h('div', { class: 'small muted', style: { maxWidth: '240px' } }, a.lastError) : null),
+        h('td', null, coverageCell(a)),
         h('td', { class: 'num' }, compact(a.followers)),
         h('td', { class: 'num' }, a.followerGrowth === null ? '—' : h('span', { class: `delta ${a.followerGrowth >= 0 ? 'up' : 'down'}` }, (a.followerGrowth >= 0 ? '+' : '') + compact(a.followerGrowth))),
         h('td', { class: 'num' }, int(a.posts)),
@@ -223,7 +237,7 @@ export function createDetail(ctx, id) {
         const growth = d.accounts.filter((a) => a.followerGrowth !== null).reduce((s, a) => s + a.followerGrowth, 0);
         const withViews = d.accounts.reduce((s, a) => s + (a.capabilities?.views ? a.posts : 0), 0);
         return h('tr', { class: 'total-row' },
-          h('td', null, h('strong', null, `Total (${d.periodLabel})`)), h('td', null, ''),
+          h('td', null, h('strong', null, `Total (${d.periodLabel})`)), h('td', null, ''), h('td', null, ''),
           h('td', { class: 'num' }, h('strong', null, compact(t.followers))),
           h('td', { class: 'num' }, h('strong', { class: `delta ${growth >= 0 ? 'up' : 'down'}` }, (growth >= 0 ? '+' : '') + compact(growth))),
           h('td', { class: 'num' }, h('strong', null, int(t.posts))),

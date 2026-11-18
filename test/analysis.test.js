@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { db, stmt } from '../server/db.js';
 import { storeAccountData } from '../server/collector.js';
-import { overview, competitorDetail, listPosts, resolveFilters, invalidate } from '../server/analysis.js';
+import { overview, competitorDetail, listPosts, resolveFilters, invalidate, coverageOf } from '../server/analysis.js';
 import { overviewInsights, periodSummary, periodLabel } from '../server/insights.js';
 
 const DAY = 86400_000;
@@ -139,4 +139,16 @@ test('period summary sums the selected duration and names the leader', () => {
   assert.equal(periodLabel({ range: '7d' }), 'the last 7 days');
   assert.equal(periodLabel({ range: 'custom', from: '2026-10-01T00:00:00.000Z', to: '2026-11-01T00:00:00.000Z' }), '2026-10-01 to 2026-10-31');
   assert.match(periodSummary(overview({ range: '30d', competitors: '999999' })), /No posts were published/);
+});
+
+test('coverage tells whether stored posts reach back over the selected period', () => {
+  const f = resolveFilters({ range: '30d' });
+  assert.equal(coverageOf({ postsTotal: 0, oldestPostAt: null, profilePostsCount: 50 }, f), 'none');
+  assert.equal(coverageOf({ postsTotal: 50, oldestPostAt: iso(400), profilePostsCount: 50 }, f), 'full');
+  assert.equal(coverageOf({ postsTotal: 20, oldestPostAt: iso(400), profilePostsCount: 900 }, f), 'full'); // reaches before the period start
+  assert.equal(coverageOf({ postsTotal: 20, oldestPostAt: iso(5), profilePostsCount: 900 }, f), 'partial'); // newest 20 only, period starts 30 days ago
+  assert.equal(coverageOf({ postsTotal: 20, oldestPostAt: iso(5), profilePostsCount: null }, f), 'partial');
+  const d = competitorDetail(ids.a, { range: '30d' });
+  assert.ok(d.accounts.every((a) => ['full', 'partial', 'none'].includes(a.coverage)));
+  assert.ok(Array.isArray(overview({ range: '30d' }).coverageIssues));
 });

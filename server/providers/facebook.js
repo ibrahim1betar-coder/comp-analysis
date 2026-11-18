@@ -60,7 +60,7 @@ export default {
     const url = pageUrl(page);
     const items = await runActor(token, process.env.APIFY_FACEBOOK_ACTOR || 'apify/facebook-posts-scraper', {
       startUrls: [{ url }],
-      resultsLimit: Math.min(maxPosts, 200),
+      resultsLimit: maxPosts,
       onlyPostsNewerThan: since ? since.slice(0, 10) : undefined,
       captionText: false,
     });

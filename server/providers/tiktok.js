@@ -52,7 +52,7 @@ export function mapApifyProfile(items, username) {
 async function fetchViaApify(username, creds, { since, maxPosts }) {
   const items = await runActor(creds.apifyToken, process.env.APIFY_TIKTOK_ACTOR || 'clockworks/tiktok-scraper', {
     profiles: [username],
-    resultsPerPage: Math.min(maxPosts, 200),
+    resultsPerPage: maxPosts,
     oldestPostDate: since ? since.slice(0, 10) : undefined,
     shouldDownloadVideos: false,
     shouldDownloadCovers: false,
@@ -67,7 +67,7 @@ async function fetchViaApify(username, creds, { since, maxPosts }) {
 
 /* ---------- Python (yt-dlp) source ---------- */
 async function fetchViaPython(username, { since, maxPosts }) {
-  const data = await runPythonJson(scriptPath('tiktok_fetch.py'), [username, String(Math.min(maxPosts, 300)), since || '']);
+  const data = await runPythonJson(scriptPath('tiktok_fetch.py'), [username, String(maxPosts), since || '']);
   if (data.profile?.private) throw new ApiError(`TikTok account "@${username}" is private`, { status: 404 });
   if (!data.posts?.length && !data.profile?.followers) throw new ApiError(`TikTok account "@${username}" returned no videos (misspelled, private, or yt-dlp needs an update: pip install -U yt-dlp)`, { status: 404 });
   return { profile: data.profile, posts: data.posts || [] };

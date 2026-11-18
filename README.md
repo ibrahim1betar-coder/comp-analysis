@@ -82,7 +82,7 @@ Copy `.env.example` to `.env`:
 | `SYNC_INTERVAL_MINUTES` | `360` | Background collection interval (`0` disables the scheduler) |
 | `SYNC_CONCURRENCY` | `3` | Accounts collected in parallel (interleaved across platforms) |
 | `LOOKBACK_DAYS` | `90` | How far back incremental syncs refresh. The first sync and a full re-sync fetch the newest `POSTS_PER_ACCOUNT` posts regardless of age |
-| `POSTS_PER_ACCOUNT` | `300` | Cap per account per sync |
+| `POSTS_PER_ACCOUNT` | `1000` | Newest posts collected per account per sync. The dashboard warns when an account's stored posts do not reach back to the start of the selected period |
 | `DB_PATH` | `./data/competitor-pulse.db` | SQLite file |
 
 `npm run sync` (or `npm run sync -- --full`) runs a collection from the command line, for cron or CI.

@@ -69,6 +69,7 @@ export function overviewInsights(o) {
   const noViews = o.platforms.filter((p) => !p.capabilities.views && p.posts);
   if (noViews.length) out.push({ tone: 'neutral', title: 'View counts not available everywhere', body: `${noViews.map((p) => p.name).join(' and ')} do not expose competitors' video play counts through their official APIs, so view totals cover ${o.platforms.filter((p) => p.capabilities.views).map((p) => p.name).join(', ') || 'no platforms'} only. Interactions are complete.` });
 
+  if (o.coverageIssues?.length) out.push({ tone: 'warn', title: `${o.coverageIssues.length} account${o.coverageIssues.length > 1 ? 's' : ''} not fully collected for this period`, body: `${o.coverageIssues.slice(0, 3).map((a) => `${providers[a.platform]?.name || a.platform} @${a.handle.replace(/^@/, '')} (${a.postsTotal} stored${a.profilePostsCount ? ` of ${a.profilePostsCount}` : ''}, back to ${a.oldestPostAt.slice(0, 10)})`).join(' · ')}. Older posts inside the period may be missing: raise POSTS_PER_ACCOUNT and run a full re-sync.` });
   if (o.accountIssues.length) out.push({ tone: 'warn', title: `${o.accountIssues.length} account${o.accountIssues.length > 1 ? 's' : ''} failed to sync`, body: o.accountIssues.slice(0, 3).map((a) => `${providers[a.platform]?.name || a.platform} @${a.handle}: ${a.error}`).join(' · ') });
   return out;
 }
