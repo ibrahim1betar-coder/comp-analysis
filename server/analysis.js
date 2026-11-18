@@ -53,26 +53,66 @@ export function resolveFilters(query = {}) {
     bucket: days <= 45 ? 'day' : days <= 400 ? 'week' : 'month',
     competitorIds,
     platforms,
+    // 'activity': views/likes/comments/shares gained during the period on any post (needs the per-post history).
+    // 'published': lifetime counters of the posts published inside the period.
+    mode: query.mode === 'published' ? 'published' : 'activity',
   };
 }
 
-function where(f, { from = f.from, to = f.to } = {}) {
-  const clauses = ['p.published_at >= ?', 'p.published_at < ?'];
-  const params = [from, to];
-  if (f.competitorIds.length) {
-    clauses.push(`a.competitor_id IN (${f.competitorIds.map(() => '?').join(',')})`);
-    params.push(...f.competitorIds);
-  }
-  if (f.platforms.length) {
-    clauses.push(`a.platform IN (${f.platforms.map(() => '?').join(',')})`);
-    params.push(...f.platforms);
-  }
-  return { sql: clauses.join(' AND '), params };
+function scope(f, alias = 'a') {
+  const clauses = [];
+  const params = [];
+  if (f.competitorIds.length) { clauses.push(`${alias}.competitor_id IN (${f.competitorIds.map(() => '?').join(',')})`); params.push(...f.competitorIds); }
+  if (f.platforms.length) { clauses.push(`${alias}.platform IN (${f.platforms.map(() => '?').join(',')})`); params.push(...f.platforms); }
+  return { sql: clauses.length ? ' AND ' + clauses.join(' AND ') : '', params };
 }
 
-const AGG = `COUNT(p.id) AS posts, SUM(p.views) AS views, SUM(p.interactions) AS interactions, SUM(p.likes) AS likes,
-  SUM(p.comments) AS comments, SUM(p.shares) AS shares, SUM(p.saves) AS saves,
-  SUM(CASE WHEN p.views IS NOT NULL THEN 1 ELSE 0 END) AS posts_with_views`;
+const DAYS_BEFORE = 30; // how far before the period we look for a post's previous snapshot
+const dayShift = (iso, days) => new Date(new Date(iso).getTime() + days * DAY).toISOString().slice(0, 10);
+
+/**
+ * Metric source: a CTE named `m` with one row per (post, day) and the columns
+ * post_id, day, published_at, account_id, competitor_id, platform, type, posts, views, likes, comments, shares, saves, interactions.
+ *  - published mode: one row per post published in the window, carrying its lifetime counters.
+ *  - activity mode : one row per post snapshot inside the window, carrying the counters gained since the previous snapshot
+ *                    (a post published inside the window contributes its full counters on its first snapshot).
+ */
+function source(f, { from = f.from, to = f.to } = {}) {
+  const sc = scope(f);
+  if (f.mode === 'published') {
+    return {
+      sql: `WITH m AS (
+        SELECT p.id AS post_id, substr(p.published_at, 1, 10) AS day, p.published_at, p.account_id, a.competitor_id, a.platform, p.type,
+               1 AS posts, p.views, p.likes, p.comments, p.shares, p.saves, p.interactions
+        FROM posts p JOIN accounts a ON a.id = p.account_id
+        WHERE p.published_at >= ? AND p.published_at < ?${sc.sql})`,
+      params: [from, to, ...sc.params],
+    };
+  }
+  const fromDay = from.slice(0, 10);
+  const toDay = to.slice(0, 10);
+  const gain = (col, prev) => `CASE WHEN pl IS NULL THEN CASE WHEN published_at >= ? THEN ${col} ELSE ${col === 'views' ? 'NULL' : '0'} END ELSE MAX(0, ${col} - ${prev}) END AS ${col}`;
+  return {
+    sql: `WITH snap AS (
+        SELECT s.post_id, s.captured_on, p.published_at, p.account_id, a.competitor_id, a.platform, p.type,
+               s.views, s.likes, s.comments, s.shares, s.saves,
+               LAG(s.views) OVER w AS pv, LAG(s.likes) OVER w AS pl, LAG(s.comments) OVER w AS pc, LAG(s.shares) OVER w AS ps, LAG(s.saves) OVER w AS px
+        FROM post_snapshots s JOIN posts p ON p.id = s.post_id JOIN accounts a ON a.id = p.account_id
+        WHERE s.captured_on >= ? AND s.captured_on < ? AND p.published_at < ?${sc.sql}
+        WINDOW w AS (PARTITION BY s.post_id ORDER BY s.captured_on)
+      ), g AS (
+        SELECT post_id, captured_on AS day, published_at, account_id, competitor_id, platform, type,
+               CASE WHEN pl IS NULL AND published_at >= ? THEN 1 ELSE 0 END AS posts,
+               ${gain('views', 'pv')}, ${gain('likes', 'pl')}, ${gain('comments', 'pc')}, ${gain('shares', 'ps')}, ${gain('saves', 'px')}
+        FROM snap WHERE captured_on >= ?
+      ), m AS (SELECT *, (likes + comments + shares + saves) AS interactions FROM g)`,
+    params: [dayShift(from, -DAYS_BEFORE), toDay, to, ...sc.params, from, from, from, from, from, from, fromDay],
+  };
+}
+
+const AGG = `SUM(m.posts) AS posts, SUM(m.views) AS views, SUM(m.interactions) AS interactions, SUM(m.likes) AS likes,
+  SUM(m.comments) AS comments, SUM(m.shares) AS shares, SUM(m.saves) AS saves,
+  COUNT(DISTINCT CASE WHEN m.views IS NOT NULL THEN m.post_id END) AS posts_with_views`;
 
 // Aggregate columns where SQL NULL means "nothing counted" and should read as 0. `views` stays NULL (= not available).
 const ZERO_WHEN_NULL = new Set(['posts', 'interactions', 'likes', 'comments', 'shares', 'saves', 'posts_with_views']);
@@ -84,13 +124,23 @@ const toNum = (row) => {
 
 /* ---------- building blocks ------------------------------------------------ */
 function totals(f, window) {
-  const w = where(f, window);
-  return toNum(stmt(`SELECT ${AGG} FROM posts p JOIN accounts a ON a.id = p.account_id WHERE ${w.sql}`).get(...w.params));
+  const src = source(f, window);
+  return toNum(stmt(`${src.sql} SELECT ${AGG} FROM m`).get(...src.params));
 }
 
 function groupBy(f, expr, alias) {
-  const w = where(f);
-  return stmt(`SELECT ${expr} AS ${alias}, ${AGG} FROM posts p JOIN accounts a ON a.id = p.account_id WHERE ${w.sql} GROUP BY ${alias}`).all(...w.params).map(toNum);
+  const src = source(f);
+  return stmt(`${src.sql} SELECT ${expr} AS ${alias}, ${AGG} FROM m GROUP BY ${alias}`).all(...src.params).map(toNum);
+}
+
+/** Lifetime counters of every post in scope (no date filter) and the day the per-post history starts. */
+function lifetime(f) {
+  const sc = scope(f);
+  const row = toNum(stmt(`SELECT COUNT(p.id) AS posts, SUM(p.views) AS views, SUM(p.interactions) AS interactions, SUM(p.likes) AS likes, SUM(p.comments) AS comments,
+    SUM(p.shares) AS shares, SUM(p.saves) AS saves, SUM(CASE WHEN p.views IS NOT NULL THEN 1 ELSE 0 END) AS posts_with_views
+    FROM posts p JOIN accounts a ON a.id = p.account_id WHERE 1=1${sc.sql}`).get(...sc.params));
+  const since = stmt(`SELECT MIN(s.captured_on) AS d FROM post_snapshots s JOIN posts p ON p.id = s.post_id JOIN accounts a ON a.id = p.account_id WHERE 1=1${sc.sql}`).get(...sc.params)?.d || null;
+  return { ...row, trackingSince: since };
 }
 
 /** Followers per account from the newest snapshot on or before the calendar day of `before` (ISO date-time). */
@@ -131,11 +181,9 @@ function bucketKeys(f) {
 }
 
 function series(f, groupExpr) {
-  const w = where(f);
-  const rows = stmt(`
-    SELECT substr(p.published_at, 1, 10) AS day, ${groupExpr} AS grp, COUNT(p.id) AS posts, SUM(p.views) AS views, SUM(p.interactions) AS interactions
-    FROM posts p JOIN accounts a ON a.id = p.account_id WHERE ${w.sql} GROUP BY day, grp
-  `).all(...w.params).map(toNum);
+  const src = source(f);
+  const rows = stmt(`${src.sql} SELECT m.day AS day, ${groupExpr} AS grp, SUM(m.posts) AS posts, SUM(m.views) AS views, SUM(m.interactions) AS interactions
+    FROM m GROUP BY day, grp`).all(...src.params).map(toNum);
   const { keys, toKey } = bucketKeys(f);
   const index = new Map(keys.map((k, i) => [k, i]));
   const groups = new Map();
@@ -155,16 +203,19 @@ function series(f, groupExpr) {
   return { bucket: f.bucket, keys, total, groups: [...groups.values()] };
 }
 
-// engagement = interactions per 100 views (NULL when the post has no view count)
-const POST_SELECT = `p.id, p.account_id, p.published_at, p.type, p.url, p.caption, p.thumbnail_url, p.views, p.likes, p.comments, p.shares, p.saves, p.interactions,
-  CASE WHEN p.views > 0 THEN 100.0 * p.interactions / p.views END AS engagement,
+/** Per-post metrics for the window: `pm` (aggregated from m) joined to the post itself. Lifetime counters ride along. */
+const POST_SELECT = `p.id, p.account_id, p.published_at, p.type, p.url, p.caption, p.thumbnail_url,
+  pm.views, pm.likes, pm.comments, pm.shares, pm.saves, pm.interactions, pm.is_new,
+  p.views AS lifetime_views, p.likes AS lifetime_likes, p.comments AS lifetime_comments, p.shares AS lifetime_shares, p.saves AS lifetime_saves, p.interactions AS lifetime_interactions,
+  CASE WHEN pm.views > 0 THEN 100.0 * pm.interactions / pm.views END AS engagement,
   a.platform, a.handle, a.display_name, a.competitor_id, c.name AS competitor, c.color_slot`;
+const POST_FROM = `, pm AS (SELECT post_id, MAX(posts) AS is_new, SUM(views) AS views, SUM(likes) AS likes, SUM(comments) AS comments, SUM(shares) AS shares, SUM(saves) AS saves, SUM(interactions) AS interactions FROM m GROUP BY post_id)
+  SELECT ${POST_SELECT} FROM pm JOIN posts p ON p.id = pm.post_id JOIN accounts a ON a.id = p.account_id JOIN competitors c ON c.id = a.competitor_id`;
 
 function topPosts(f, { by = 'interactions', limit = 10 } = {}) {
-  const w = where(f);
-  const order = by === 'views' ? 'p.views DESC NULLS LAST, p.interactions DESC' : 'p.interactions DESC, p.views DESC';
-  return stmt(`SELECT ${POST_SELECT} FROM posts p JOIN accounts a ON a.id = p.account_id JOIN competitors c ON c.id = a.competitor_id
-    WHERE ${w.sql} ORDER BY ${order} LIMIT ?`).all(...w.params, limit).map(toNum);
+  const src = source(f);
+  const order = by === 'views' ? 'pm.views DESC NULLS LAST, pm.interactions DESC' : 'pm.interactions DESC, pm.views DESC';
+  return stmt(`${src.sql}${POST_FROM} WHERE (pm.interactions > 0 OR pm.views > 0 OR pm.is_new = 1) ORDER BY ${order} LIMIT ?`).all(...src.params, limit).map(toNum);
 }
 
 const rate = (interactions, posts, followers) => (posts && followers ? (interactions / posts / followers) * 100 : null);
@@ -194,13 +245,13 @@ export function overview(query) {
 
     const current = totals(f);
     const previous = totals(f, { from: f.prevFrom, to: f.prevTo });
-    const byCompetitor = new Map(groupBy(f, 'a.competitor_id', 'grp').map((r) => [r.grp, r]));
+    const byCompetitor = new Map(groupBy(f, 'm.competitor_id', 'grp').map((r) => [r.grp, r]));
     const byCompetitorPrev = (() => {
-      const w = where(f, { from: f.prevFrom, to: f.prevTo });
-      return new Map(stmt(`SELECT a.competitor_id AS grp, ${AGG} FROM posts p JOIN accounts a ON a.id = p.account_id WHERE ${w.sql} GROUP BY grp`).all(...w.params).map(toNum).map((r) => [r.grp, r]));
+      const src = source(f, { from: f.prevFrom, to: f.prevTo });
+      return new Map(stmt(`${src.sql} SELECT m.competitor_id AS grp, ${AGG} FROM m GROUP BY grp`).all(...src.params).map(toNum).map((r) => [r.grp, r]));
     })();
-    const byPlatform = new Map(groupBy(f, 'a.platform', 'grp').map((r) => [r.grp, r]));
-    const matrix = groupBy(f, "a.competitor_id || ':' || a.platform", 'grp').map((r) => {
+    const byPlatform = new Map(groupBy(f, 'm.platform', 'grp').map((r) => [r.grp, r]));
+    const matrix = groupBy(f, "m.competitor_id || ':' || m.platform", 'grp').map((r) => {
       const [cid, platform] = r.grp.split(':');
       return { competitorId: Number(cid), platform, posts: r.posts, views: r.views, interactions: r.interactions };
     });
@@ -248,7 +299,7 @@ export function overview(query) {
       };
     }).filter((r) => r.accounts || r.posts).sort((a, b) => b.interactions - a.interactions);
 
-    const s = series(f, 'a.competitor_id');
+    const s = series(f, 'm.competitor_id');
     const nameOf = new Map(competitors.map((c) => [c.id, c]));
     s.groups = s.groups.map((g) => ({ ...g, id: g.key, name: nameOf.get(g.key)?.name || `#${g.key}`, slot: nameOf.get(g.key)?.color_slot || 1 }));
 
@@ -262,6 +313,7 @@ export function overview(query) {
         followers: [...fNowByComp.values()].reduce((a, b) => a + b, 0),
         prev: previous,
       },
+      lifetime: lifetime(f),
       competitors: competitorRows,
       platforms: platformRows,
       matrix,
@@ -293,7 +345,7 @@ export function competitorDetail(id, query) {
       (SELECT MIN(published_at) FROM posts p WHERE p.account_id = a.id) AS oldest_post_at,
       (SELECT MAX(published_at) FROM posts p WHERE p.account_id = a.id) AS newest_post_at
       FROM accounts a WHERE a.competitor_id = ? ORDER BY a.platform`).all(id);
-    const byAccount = new Map(groupBy(f, 'a.id', 'grp').map((r) => [r.grp, r]));
+    const byAccount = new Map(groupBy(f, 'm.account_id', 'grp').map((r) => [r.grp, r]));
     const fNow = new Map(followersBefore(f.to).map((r) => [r.account_id, r]));
     const fStart = new Map(followersBefore(f.from).map((r) => [r.account_id, r]));
     const accountRows = accounts.map((a) => {
@@ -318,10 +370,10 @@ export function competitorDetail(id, query) {
     const previous = totals(f, { from: f.prevFrom, to: f.prevTo });
     const followers = accountRows.reduce((s, a) => s + (a.followers || 0), 0);
 
-    const types = groupBy(f, 'p.type', 'grp').map((r) => ({ type: r.grp, ...r })).sort((a, b) => b.interactions - a.interactions);
-    const weekdays = groupBy(f, "CAST(strftime('%w', p.published_at) AS INTEGER)", 'grp');
-    const hours = groupBy(f, "CAST(strftime('%H', p.published_at) AS INTEGER)", 'grp');
-    const s = series(f, 'a.platform');
+    const types = groupBy(f, 'm.type', 'grp').map((r) => ({ type: r.grp, ...r })).sort((a, b) => b.interactions - a.interactions);
+    const weekdays = groupBy(f, "CAST(strftime('%w', m.published_at) AS INTEGER)", 'grp');
+    const hours = groupBy(f, "CAST(strftime('%H', m.published_at) AS INTEGER)", 'grp');
+    const s = series(f, 'm.platform');
     s.groups = s.groups.map((g) => ({ ...g, name: providers[g.key]?.name || g.key }));
 
     const followerSeries = stmt(`
@@ -333,6 +385,7 @@ export function competitorDetail(id, query) {
       filters: f,
       competitor: { id: competitor.id, name: competitor.name, slot: competitor.color_slot, isSelf: Boolean(competitor.is_self), notes: competitor.notes },
       totals: { ...current, followers, prev: previous, engagementRate: rate(current.interactions, current.posts, followers) },
+      lifetime: lifetime(f),
       accounts: accountRows,
       types,
       weekdays: Array.from({ length: 7 }, (_, d) => weekdays.find((r) => r.grp === d) || { grp: d, posts: 0, views: null, interactions: 0 }),
@@ -345,30 +398,35 @@ export function competitorDetail(id, query) {
   });
 }
 
-const SORTABLE = { published_at: 'p.published_at', views: 'p.views', interactions: 'p.interactions', likes: 'p.likes', comments: 'p.comments', shares: 'p.shares', engagement: 'engagement' };
+const SORTABLE = { published_at: 'p.published_at', views: 'pm.views', interactions: 'pm.interactions', likes: 'pm.likes', comments: 'pm.comments', shares: 'pm.shares', engagement: 'engagement' };
 export function listPosts(query) {
   const f = resolveFilters(query);
-  const w = where(f);
-  const params = [...w.params];
-  let sql = w.sql;
-  if (query.type) { sql += ' AND p.type = ?'; params.push(query.type); }
-  if (query.q) { sql += ' AND p.caption LIKE ? ESCAPE \'\\\''; params.push(`%${String(query.q).replace(/[%_\\]/g, '\\$&')}%`); }
-  const sort = SORTABLE[query.sort] || 'p.interactions';
+  const src = source(f);
+  const extra = [];
+  const params = [];
+  if (query.type) { extra.push('p.type = ?'); params.push(query.type); }
+  if (query.q) { extra.push("p.caption LIKE ? ESCAPE '\\'"); params.push(`%${String(query.q).replace(/[%_\\]/g, '\\$&')}%`); }
+  if (f.mode === 'activity') extra.push('(pm.interactions > 0 OR pm.views > 0 OR pm.is_new = 1)');
+  const whereSql = extra.length ? ` WHERE ${extra.join(' AND ')}` : '';
+  const sort = SORTABLE[query.sort] || 'pm.interactions';
   const dir = query.dir === 'asc' ? 'ASC' : 'DESC';
   const pageSize = Math.min(200, Math.max(10, Number(query.pageSize) || 50));
   const page = Math.max(1, Number(query.page) || 1);
-  const sums = toNum(stmt(`SELECT ${AGG} FROM posts p JOIN accounts a ON a.id = p.account_id WHERE ${sql}`).get(...params));
-  const total = sums.posts;
-  const rows = stmt(`SELECT ${POST_SELECT} FROM posts p JOIN accounts a ON a.id = p.account_id JOIN competitors c ON c.id = a.competitor_id
-    WHERE ${sql} ORDER BY ${sort} ${dir} NULLS LAST, p.published_at DESC LIMIT ? OFFSET ?`).all(...params, pageSize, (page - 1) * pageSize).map(toNum);
-  return { filters: f, total: Number(total), page, pageSize, rows, sums };
+  const base = `${src.sql}${POST_FROM}${whereSql}`;
+  const sums = toNum(stmt(`SELECT COUNT(*) AS posts, SUM(views) AS views, SUM(interactions) AS interactions, SUM(likes) AS likes, SUM(comments) AS comments, SUM(shares) AS shares, SUM(saves) AS saves,
+    SUM(CASE WHEN views IS NOT NULL THEN 1 ELSE 0 END) AS posts_with_views FROM (${base})`).get(...src.params, ...params));
+  const rows = stmt(`${base} ORDER BY ${sort} ${dir} NULLS LAST, p.published_at DESC LIMIT ? OFFSET ?`).all(...src.params, ...params, pageSize, (page - 1) * pageSize).map(toNum);
+  return { filters: f, total: Number(sums.posts), page, pageSize, rows, sums };
 }
 
 export function exportPosts(query) {
   const f = resolveFilters(query);
-  const w = where(f);
-  return stmt(`SELECT c.name AS competitor, a.platform, a.handle, p.id, p.published_at, p.type, p.url, p.views, p.likes, p.comments, p.shares, p.saves, p.interactions, p.caption
-    FROM posts p JOIN accounts a ON a.id = p.account_id JOIN competitors c ON c.id = a.competitor_id WHERE ${w.sql} ORDER BY p.published_at DESC`).all(...w.params).map(toNum);
+  const src = source(f);
+  return stmt(`${src.sql}${POST_FROM} ORDER BY p.published_at DESC`).all(...src.params).map(toNum)
+    .map((r) => ({ competitor: r.competitor, platform: r.platform, handle: r.handle, id: r.id, published_at: r.published_at, type: r.type, url: r.url,
+      [f.mode === 'activity' ? 'views_gained' : 'views']: r.views, [f.mode === 'activity' ? 'likes_gained' : 'likes']: r.likes, [f.mode === 'activity' ? 'comments_gained' : 'comments']: r.comments,
+      [f.mode === 'activity' ? 'shares_gained' : 'shares']: r.shares, [f.mode === 'activity' ? 'saves_gained' : 'saves']: r.saves, [f.mode === 'activity' ? 'interactions_gained' : 'interactions']: r.interactions,
+      lifetime_views: r.lifetime_views, lifetime_interactions: r.lifetime_interactions, caption: r.caption }));
 }
 
 export function stats() {

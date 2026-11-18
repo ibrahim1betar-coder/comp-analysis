@@ -19,13 +19,14 @@ export function competitorLink(c, { slot = c.slot ?? c.color_slot, id = c.id, na
 }
 
 /** Stat tile: label, value, delta vs previous period, sparkline. */
-export function statTile({ label, value, prev, series, format = compact, hero = false, upIsGood = true, note, color }) {
+export function statTile({ label, value, prev, series, format = compact, hero = false, upIsGood = true, note, color, extra }) {
   const d = prev === undefined ? null : change(value, prev);
   const deltaEl = d === null ? h('span', { class: 'muted' }, note || (prev === undefined ? '' : 'no previous data')) : h('span', { class: `delta ${d >= 0 === upIsGood ? 'up' : 'down'}`, title: `Previous period: ${format(prev)}` }, signedPct(d), h('span', { class: 'muted', style: { fontWeight: 400 } }, ' vs previous'));
   return h('div', { class: `card stat ${hero ? 'hero' : ''}` },
     h('div', { class: 'label' }, label),
     h('div', { class: 'value', title: int(value) }, format(value)),
     h('div', { class: 'meta' }, deltaEl, series && series.length > 1 ? sparkline(series, { color }) : null),
+    extra ? h('div', { class: 'muted small' }, extra) : null,
   );
 }
 
@@ -95,14 +96,17 @@ export function postsTable(rows, { showCompetitor = true, sort, onSort } = {}) {
       h('td', null, platformBadge(p.platform)),
       h('td', null, title(p.type)),
       h('td', { class: 'nowrap', title: longDate(p.published_at) }, new Date(p.published_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' })),
-      h('td', { class: 'num', title: p.views === null ? 'Not available for this platform' : int(p.views) }, p.views === null ? h('span', { class: 'muted' }, 'n/a') : compact(p.views)),
+      h('td', { class: 'num', title: p.views === null ? 'Not available for this platform' : `${int(p.views)} in period · lifetime ${int(p.lifetime_views)}` }, p.views === null ? h('span', { class: 'muted' }, 'n/a') : compact(p.views), lifetimeNote(p.views, p.lifetime_views)),
       h('td', { class: 'num' }, compact(p.likes)),
       h('td', { class: 'num' }, compact(p.comments)),
       h('td', { class: 'num' }, compact(p.shares)),
-      h('td', { class: 'num' }, h('strong', null, compact(p.interactions))),
+      h('td', { class: 'num', title: `${int(p.interactions)} in period · lifetime ${int(p.lifetime_interactions)}` }, h('strong', null, compact(p.interactions)), lifetimeNote(p.interactions, p.lifetime_interactions)),
       h('td', { class: 'num', title: 'Interactions per 100 views' }, p.engagement === null || p.engagement === undefined ? h('span', { class: 'muted' }, '—') : pct(p.engagement, 1)),
     ))),
   ));
 }
+
+/** In activity mode a post's period value differs from its lifetime total: show the total underneath. */
+const lifetimeNote = (periodValue, lifetimeValue) => (lifetimeValue !== undefined && lifetimeValue !== null && periodValue !== null && lifetimeValue !== periodValue ? h('div', { class: 'muted', style: { fontSize: '0.72rem' } }, `of ${compact(lifetimeValue)}`) : null);
 
 export const lastSyncText = (iso) => (iso ? `Last sync ${relTime(iso)}` : 'Not synced yet');

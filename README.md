@@ -89,6 +89,15 @@ Copy `.env.example` to `.env`:
 
 ## How the analysis works
 
+Two ways to count, switchable in the filter row:
+
+* **Activity in period** (default): views, likes, comments, shares and saves **gained during the selected period on any post**,
+  old or new. Every sync stores each post's counters (`post_snapshots`); the period value is the difference between the
+  snapshots at the period's start and end. A post published inside the period contributes its full counters. The first
+  sync only records the starting point, so activity appears from the second sync on.
+* **Published in period**: lifetime totals of the posts published inside the period. Use it for ranges before tracking
+  started, or to compare launches.
+
 * **Interactions** = likes/reactions + comments + shares (reposts, quotes) + saves (bookmarks).
 * **Video views** = platform-reported view counts. Totals cover only platforms that expose them.
 * **Engagement rate** = average interactions per post ÷ followers × 100.

@@ -48,8 +48,8 @@ test('resolveFilters builds a window with a matching previous period', () => {
   assert.deepEqual(resolveFilters({ platforms: 'youtube,bogus' }).platforms, ['youtube']);
 });
 
-test('overview aggregates interactions and views per competitor and platform', () => {
-  const o = overview({ range: '30d' });
+test('overview aggregates interactions and views per competitor and platform (published mode)', () => {
+  const o = overview({ range: '30d', mode: 'published' });
   assert.equal(o.totals.posts, 4);
   assert.equal(o.totals.interactions, 110 + 55 + 220 + 2000);
   assert.equal(o.totals.views, 1000 + 500 + 20000); // instagram views are NULL and ignored
@@ -75,19 +75,19 @@ test('overview aggregates interactions and views per competitor and platform', (
 });
 
 test('platform and competitor filters scope every number', () => {
-  const o = overview({ range: '30d', platforms: 'youtube' });
+  const o = overview({ range: '30d', platforms: 'youtube', mode: 'published' });
   assert.equal(o.totals.posts, 2);
   assert.equal(o.platforms.length, 1);
-  const only = overview({ range: '30d', competitors: String(ids.b) });
+  const only = overview({ range: '30d', competitors: String(ids.b), mode: 'published' });
   assert.equal(only.competitors.length, 1);
   assert.equal(only.totals.interactions, 2000);
   assert.equal(only.totals.followers, 10000); // followers and accounts respect the competitor filter
   assert.equal(only.totals.accounts, 1);
-  assert.equal(overview({ range: '30d', platforms: 'youtube' }).totals.followers, 1000);
+  assert.equal(overview({ range: '30d', platforms: 'youtube', mode: 'published' }).totals.followers, 1000);
 });
 
 test('competitor detail breaks down by account, type and weekday', () => {
-  const d = competitorDetail(ids.a, { range: '30d' });
+  const d = competitorDetail(ids.a, { range: '30d', mode: 'published' });
   assert.equal(d.accounts.length, 2);
   const yt = d.accounts.find((x) => x.platform === 'youtube');
   assert.equal(yt.posts, 2);
@@ -101,7 +101,7 @@ test('competitor detail breaks down by account, type and weekday', () => {
 });
 
 test('listPosts sorts, paginates, filters by type and searches captions', () => {
-  const byViews = listPosts({ range: '30d', sort: 'views', dir: 'desc' });
+  const byViews = listPosts({ range: '30d', sort: 'views', dir: 'desc', mode: 'published' });
   assert.equal(byViews.total, 4);
   assert.equal(byViews.rows[0].id, 'tiktok:t1');
   assert.ok(Math.abs(byViews.rows[0].engagement - 10) < 1e-9); // 2000 interactions / 20000 views
@@ -110,20 +110,20 @@ test('listPosts sorts, paginates, filters by type and searches captions', () => 
   assert.equal(listPosts({ range: '30d', type: 'short' }).total, 1);
   const sums = listPosts({ range: '30d', pageSize: 10 }).sums; // sums cover every matching post, not just the page
   assert.deepEqual({ posts: sums.posts, views: sums.views, interactions: sums.interactions, likes: sums.likes }, { posts: 4, views: 21500, interactions: 2385, likes: 1850 });
-  assert.equal(listPosts({ range: 'all' }).total, 5);
-  assert.equal(listPosts({ range: 'all', pageSize: 10, page: 2 }).rows.length, 0);
-  assert.equal(listPosts({ range: 'all', q: '%' }).total, 0); // LIKE wildcard is escaped
+  assert.equal(listPosts({ range: 'all', mode: 'published' }).total, 5);
+  assert.equal(listPosts({ range: 'all', pageSize: 10, page: 2, mode: 'published' }).rows.length, 0);
+  assert.equal(listPosts({ range: 'all', q: '%', mode: 'published' }).total, 0); // LIKE wildcard is escaped
 });
 
 test('re-storing a post updates counters instead of duplicating', () => {
   storeAccountData(ids.bTt, 'tiktok', { profile: null, posts: [{ externalId: 't1', publishedAt: iso(1), type: 'video', views: 25000, likes: 1600, comments: 100, shares: 400, saves: 0 }] });
   invalidate();
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM posts').get().n, 5);
-  assert.equal(overview({ range: '30d' }).competitors.find((c) => c.name === 'Beta').interactions, 2100);
+  assert.equal(overview({ range: '30d', mode: 'published' }).competitors.find((c) => c.name === 'Beta').interactions, 2100);
 });
 
 test('insights name the leaders and flag missing view data', () => {
-  const o = overview({ range: '30d' });
+  const o = overview({ range: '30d', mode: 'published' });
   const titles = overviewInsights(o).map((i) => i.title);
   assert.ok(titles.includes('Beta leads on interactions'));
   assert.ok(titles.includes('Beta wins on video views'));
@@ -131,14 +131,14 @@ test('insights name the leaders and flag missing view data', () => {
 });
 
 test('period summary sums the selected duration and names the leader', () => {
-  const o = overview({ range: '30d' });
+  const o = overview({ range: '30d', mode: 'published' });
   const text = periodSummary(o);
   assert.match(text, /In the last 30 days, 2 competitors published 4 posts that earned 2.5K interactions \(1.9K likes, 135 comments, 400 shares\) and 27K video views\./);
   assert.match(text, /Beta leads with 2.1K interactions/);
   assert.match(text, /Beta ranks #1|Alpha/);
   assert.equal(periodLabel({ range: '7d' }), 'the last 7 days');
   assert.equal(periodLabel({ range: 'custom', from: '2026-10-01T00:00:00.000Z', to: '2026-11-01T00:00:00.000Z' }), '2026-10-01 to 2026-10-31');
-  assert.match(periodSummary(overview({ range: '30d', competitors: '999999' })), /No posts were published/);
+  assert.match(periodSummary(overview({ range: '30d', competitors: '999999', mode: 'published' })), /No posts were published/);
 });
 
 test('coverage tells whether stored posts reach back over the selected period', () => {
@@ -148,7 +148,7 @@ test('coverage tells whether stored posts reach back over the selected period', 
   assert.equal(coverageOf({ postsTotal: 20, oldestPostAt: iso(400), profilePostsCount: 900 }, f), 'full'); // reaches before the period start
   assert.equal(coverageOf({ postsTotal: 20, oldestPostAt: iso(5), profilePostsCount: 900 }, f), 'partial'); // newest 20 only, period starts 30 days ago
   assert.equal(coverageOf({ postsTotal: 20, oldestPostAt: iso(5), profilePostsCount: null }, f), 'partial');
-  const d = competitorDetail(ids.a, { range: '30d' });
+  const d = competitorDetail(ids.a, { range: '30d', mode: 'published' });
   assert.ok(d.accounts.every((a) => ['full', 'partial', 'none'].includes(a.coverage)));
   assert.ok(Array.isArray(overview({ range: '30d' }).coverageIssues));
 });

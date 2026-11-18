@@ -33,6 +33,12 @@ const upsertSnapshot = () => stmt(`
     total_likes = COALESCE(excluded.total_likes, snapshots.total_likes)
 `);
 
+const upsertPostSnapshot = () => stmt(`
+  INSERT INTO post_snapshots (post_id, captured_on, views, likes, comments, shares, saves) VALUES (?, ?, ?, ?, ?, ?, ?)
+  ON CONFLICT(post_id, captured_on) DO UPDATE SET views = COALESCE(excluded.views, post_snapshots.views), likes = excluded.likes,
+    comments = excluded.comments, shares = excluded.shares, saves = excluded.saves
+`);
+
 const clampInt = (v) => (v === null || v === undefined || Number.isNaN(Number(v)) ? null : Math.max(0, Math.round(Number(v))));
 
 /** Store a provider result (or an import) for an account. Returns number of posts written. */
@@ -40,14 +46,20 @@ export function storeAccountData(accountId, platform, { profile, posts }, { mark
   const fetchedAt = nowIso();
   return transaction(() => {
     const ins = upsertPost();
+    const snap = upsertPostSnapshot();
+    const day = fetchedAt.slice(0, 10);
     let count = 0;
     for (const p of posts) {
       if (!p.externalId || !p.publishedAt) continue;
-      ins.run(
-        `${platform}:${p.externalId}`, accountId, new Date(p.publishedAt).toISOString(), p.type || 'post', p.url || null,
-        p.caption ? String(p.caption).slice(0, 2000) : null, p.thumbnailUrl || null,
-        clampInt(p.views), clampInt(p.likes) ?? 0, clampInt(p.comments) ?? 0, clampInt(p.shares) ?? 0, clampInt(p.saves) ?? 0, fetchedAt,
-      );
+      const id = `${platform}:${p.externalId}`;
+      const views = clampInt(p.views);
+      const likes = clampInt(p.likes) ?? 0;
+      const comments = clampInt(p.comments) ?? 0;
+      const shares = clampInt(p.shares) ?? 0;
+      const saves = clampInt(p.saves) ?? 0;
+      ins.run(id, accountId, new Date(p.publishedAt).toISOString(), p.type || 'post', p.url || null,
+        p.caption ? String(p.caption).slice(0, 2000) : null, p.thumbnailUrl || null, views, likes, comments, shares, saves, fetchedAt);
+      snap.run(id, p.capturedOn ? String(p.capturedOn).slice(0, 10) : day, views, likes, comments, shares, saves);
       count++;
     }
     if (profile) {

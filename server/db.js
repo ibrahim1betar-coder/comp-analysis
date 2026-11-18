@@ -72,6 +72,20 @@ CREATE TABLE IF NOT EXISTS snapshots (
   UNIQUE (account_id, captured_on)
 );
 
+-- Per-post counter history: one row per post per day (the last sync of the day wins).
+-- "Activity in period" analysis = counters at the end of the period minus counters at its start.
+CREATE TABLE IF NOT EXISTS post_snapshots (
+  post_id     TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+  captured_on TEXT NOT NULL,
+  views       INTEGER,
+  likes       INTEGER NOT NULL DEFAULT 0,
+  comments    INTEGER NOT NULL DEFAULT 0,
+  shares      INTEGER NOT NULL DEFAULT 0,
+  saves       INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (post_id, captured_on)
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS idx_post_snapshots_day ON post_snapshots(captured_on);
+
 CREATE TABLE IF NOT EXISTS credentials (
   platform   TEXT PRIMARY KEY,
   payload    TEXT NOT NULL,
@@ -94,6 +108,11 @@ CREATE TABLE IF NOT EXISTS settings (
   value TEXT
 );
 `);
+
+// Backfill: posts collected before snapshots existed get one dated by their last fetch, so history starts there.
+db.exec(`INSERT OR IGNORE INTO post_snapshots (post_id, captured_on, views, likes, comments, shares, saves)
+         SELECT id, substr(fetched_at, 1, 10), views, likes, comments, shares, saves FROM posts
+         WHERE NOT EXISTS (SELECT 1 FROM post_snapshots s WHERE s.post_id = posts.id)`);
 
 const stmtCache = new Map();
 /** Prepared statements are cached: preparing SQL is the slow part of SQLite calls. */

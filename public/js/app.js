@@ -27,7 +27,7 @@ const DEFAULT_RANGE = '90d';
 const state = {
   route: 'overview',
   param: null,
-  filters: { range: DEFAULT_RANGE, from: '', to: '', platforms: [], competitors: [] },
+  filters: { range: DEFAULT_RANGE, from: '', to: '', platforms: [], competitors: [], mode: 'activity' },
   meta: null,
   user: null,
   competitorList: [],
@@ -46,6 +46,7 @@ function parseHash() {
     to: q.get('to') || '',
     platforms: (q.get('platforms') || '').split(',').filter(Boolean),
     competitors: (q.get('competitors') || '').split(',').filter(Boolean),
+    mode: q.get('mode') === 'published' ? 'published' : 'activity',
   };
 }
 function filterQuery() {
@@ -54,6 +55,7 @@ function filterQuery() {
   if (f.range === 'custom') { if (f.from) q.set('from', f.from); if (f.to) q.set('to', f.to); } else q.set('range', f.range);
   if (f.platforms.length) q.set('platforms', f.platforms.join(','));
   if (f.competitors.length) q.set('competitors', f.competitors.join(','));
+  if (f.mode === 'published') q.set('mode', 'published');
   return q.toString();
 }
 function navigate(route, param, { keepFilters = true } = {}) {
@@ -181,8 +183,11 @@ function renderFilters() {
   }));
   const showPicker = state.competitorList.length > 1 && !(state.route === 'competitors' && state.param);
   const compSel = showPicker ? competitorPicker(f) : null;
-  replace(filtersEl, range, custom, platformChips, compSel, h('span', { class: 'spacer' }),
-    f.platforms.length || f.competitors.length || f.range !== DEFAULT_RANGE ? h('button', { class: 'btn ghost sm', onClick: () => setFilters({ range: DEFAULT_RANGE, from: '', to: '', platforms: [], competitors: [] }) }, 'Reset filters') : null);
+  const modeToggle = h('div', { class: 'tabs', role: 'group', 'aria-label': 'How to count', title: 'Activity: views, likes, comments and shares gained during the period on any post. Published: lifetime totals of the posts published in the period.' },
+    h('button', { class: f.mode === 'activity' ? 'on' : '', onClick: () => setFilters({ mode: 'activity' }) }, 'Activity in period'),
+    h('button', { class: f.mode === 'published' ? 'on' : '', onClick: () => setFilters({ mode: 'published' }) }, 'Published in period'));
+  replace(filtersEl, range, custom, modeToggle, platformChips, compSel, h('span', { class: 'spacer' }),
+    f.platforms.length || f.competitors.length || f.range !== DEFAULT_RANGE || f.mode !== 'activity' ? h('button', { class: 'btn ghost sm', onClick: () => setFilters({ range: DEFAULT_RANGE, from: '', to: '', platforms: [], competitors: [], mode: 'activity' }) }, 'Reset filters') : null);
 }
 
 /* ---------- views ---------- */
@@ -194,6 +199,7 @@ const ctx = {
   get isAdmin() { return !state.user || state.user.role === 'admin'; },
   navigate, toast, startSync, pollSync, refreshMeta, clearDemo,
   setRange: (range) => setFilters({ range }),
+  setMode: (mode) => setFilters({ mode }),
   setTitle(title, sub) { $('#page-title').textContent = title; $('#page-sub').textContent = sub || ''; document.title = `${title} · Lime Competitor Analysis`; },
 };
 let currentView = null;

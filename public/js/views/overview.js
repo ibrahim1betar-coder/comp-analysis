@@ -28,7 +28,7 @@ export function create(ctx) {
   const platViews = h('canvas', { role: 'img', 'aria-label': 'Video views by platform' });
   const sovBox = h('div');
   slots.charts.append(
-    card('Interactions over time', 'Likes, comments, shares and saves on posts published in each period', h('div', { class: 'chart-box' }, interactionsCanvas)),
+    card('Interactions over time', 'Likes, comments, shares and saves counted in each period (activity: gained between syncs; published: by publish date)', h('div', { class: 'chart-box' }, interactionsCanvas)),
     card('Video views over time', 'Views reported by each platform for video posts (reels, TikToks, YouTube videos, X videos)', h('div', { class: 'chart-box' }, viewsCanvas)),
   );
   slots.mix.append(
@@ -55,7 +55,9 @@ export function create(ctx) {
     // banner
     const banners = [];
     if (d.hasDemoData) banners.push(h('div', { class: 'banner' }, h('p', null, 'You are looking at demo data. ', h('a', { href: '#/connect' }, 'Connect your platforms'), ' to replace it with live competitor metrics.'), h('button', { class: 'btn sm', onClick: ctx.clearDemo }, 'Remove demo data')));
-    if (!t.posts && ctx.meta.stats.posts > 0) banners.push(h('div', { class: 'banner warn' }, h('p', null, `No posts were published in the selected period, but ${ctx.meta.stats.posts} collected posts exist. `, h('a', { href: '#/overview?range=all', onClick: (e) => { e.preventDefault(); ctx.setRange('all'); } }, 'Show all time'), ' or widen the date range.')));
+    if (d.filters.mode === 'activity' && d.lifetime?.trackingSince && d.lifetime.trackingSince > d.filters.from.slice(0, 10)) banners.push(h('div', { class: 'banner' }, h('p', null, `Activity is measured between syncs. Tracking of these accounts began on ${d.lifetime.trackingSince}, so days before that show no activity. `, h('a', { href: '#', onClick: (e) => { e.preventDefault(); ctx.setMode('published'); } }, 'Switch to "Published in period"'), ' to see lifetime totals of posts by publish date.')));
+    if (d.filters.mode === 'activity' && !t.interactions && !t.views && d.lifetime?.posts && d.lifetime.trackingSince && d.lifetime.trackingSince >= new Date().toISOString().slice(0, 10)) banners.push(h('div', { class: 'banner' }, h('p', null, 'The first sync only records a starting point. Views and interactions gained by existing posts appear after the next sync (every ', `${ctx.meta.sync.intervalMinutes} min`, ' or click Sync now later).')));
+    if (!t.posts && !t.interactions && ctx.meta.stats.posts > 0 && d.filters.mode === 'published') banners.push(h('div', { class: 'banner warn' }, h('p', null, `No posts were published in the selected period, but ${ctx.meta.stats.posts} collected posts exist. `, h('a', { href: '#/overview?range=all', onClick: (e) => { e.preventDefault(); ctx.setRange('all'); } }, 'Show all time'), ' or widen the date range.')));
     if (d.coverageIssues?.length) banners.push(h('div', { class: 'banner warn' }, h('p', null, `${d.coverageIssues.length} account${d.coverageIssues.length > 1 ? 's are' : ' is'} not fully collected for this period (older posts may be missing): `, d.coverageIssues.slice(0, 4).map((a) => `@${a.handle.replace(/^@/, '')} (${a.postsTotal} stored${a.profilePostsCount ? ` of ${a.profilePostsCount}` : ''})`).join(', '), '. Open the competitor and click Full re-sync.')));
     if (d.accountIssues.length) banners.push(h('div', { class: 'banner warn' }, h('p', null, `${d.accountIssues.length} account(s) failed to sync. `, h('a', { href: '#/competitors' }, 'See details'))));
     replace(slots.banner, banners.length ? h('div', { style: { display: 'grid', gap: '8px' } }, banners) : null);
@@ -64,10 +66,12 @@ export function create(ctx) {
     replace(slots.summary, card('Overall summary', `Totals for ${d.periodLabel} across the selected competitors and platforms`, summaryTable(d)));
 
     const s = d.series;
+    const act = d.filters.mode === 'activity';
+    const L = d.lifetime || {};
     replace(slots.kpis,
-      statTile({ label: 'Total interactions', value: t.interactions, prev: t.prev.interactions, series: s.total.interactions, hero: false }),
-      statTile({ label: 'Video views', value: t.views, prev: t.prev.views, series: s.total.views, note: t.views === null ? 'No platform with view data' : undefined }),
-      statTile({ label: 'Posts published', value: t.posts, prev: t.prev.posts, series: s.total.posts }),
+      statTile({ label: act ? 'Interactions gained' : 'Total interactions', value: t.interactions, prev: t.prev.interactions, series: s.total.interactions, extra: act ? `Lifetime on all tracked posts: ${compact(L.interactions)}` : undefined }),
+      statTile({ label: act ? 'Video views gained' : 'Video views', value: t.views, prev: t.prev.views, series: s.total.views, note: t.views === null ? 'No view data yet' : undefined, extra: act ? `Lifetime: ${L.views === null ? 'n/a' : compact(L.views)}` : undefined }),
+      statTile({ label: 'Posts published', value: t.posts, prev: t.prev.posts, series: s.total.posts, extra: act ? `${int(L.posts)} posts tracked in total` : undefined }),
       statTile({ label: 'Followers tracked', value: t.followers, format: compact, note: 'sum of latest snapshots' }),
       statTile({ label: 'Interactions per post', value: t.posts ? t.interactions / t.posts : 0, prev: t.prev.posts ? t.prev.interactions / t.prev.posts : undefined }),
     );
