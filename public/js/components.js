@@ -9,6 +9,7 @@ export function platformBadge(platform, { label = true } = {}) {
 }
 
 export function statusBadge(status, error) {
+  if (status === 'ok' && error) return h('span', { class: 'badge warn', title: error }, icon('warn'), 'Synced, 0 posts');
   const map = { ok: ['ok', 'check', 'Synced'], demo: ['info', 'info', 'Demo data'], manual: ['info', 'download', 'Imported'], pending: ['warn', 'info', 'Waiting for sync'], error: ['bad', 'warn', 'Error'] };
   const [cls, ic, text] = map[status] || ['', 'info', status];
   return h('span', { class: `badge ${cls}`, title: error || text }, icon(ic), text);

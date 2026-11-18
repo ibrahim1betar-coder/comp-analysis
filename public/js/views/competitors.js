@@ -104,7 +104,7 @@ export function createList(ctx) {
       h('span', { class: 'muted small nowrap' }, a.last_synced_at ? relTime(a.last_synced_at) : ''),
       a.status !== 'demo' && a.status !== 'manual' ? h('button', { class: 'btn ghost sm', title: 'Sync now', onClick: async (e) => {
         const btn = e.currentTarget; btn.disabled = true;
-        try { const r = await post(`/api/accounts/${a.id}/sync`); ctx.toast(r.ok ? `Synced ${at(a.handle)}: ${r.posts} posts` : r.error, r.ok ? 'ok' : 'bad'); await update(); } finally { btn.disabled = false; }
+        try { const r = await post(`/api/accounts/${a.id}/sync`); ctx.toast(r.ok ? `Synced ${at(a.handle)}: ${r.message || r.posts + ' posts'}` : r.error, r.ok && r.posts ? 'ok' : 'bad'); await update(); } finally { btn.disabled = false; }
       } }, icon('sync')) : null,
       h('button', { class: 'btn ghost sm danger', title: 'Remove account', onClick: async () => {
         if (!confirm(`Remove ${at(a.handle)} (${PLATFORM_NAMES[a.platform]}) and its posts?`)) return;
@@ -207,7 +207,7 @@ export function createDetail(ctx, id) {
     const back = a.oldestPostAt ? `back to ${new Date(a.oldestPostAt).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}` : '';
     const fullBtn = h('button', { class: 'btn ghost sm', title: 'Re-collect everything for this account (newest POSTS_PER_ACCOUNT posts)', onClick: async (e) => {
       e.currentTarget.disabled = true; ctx.toast('Full re-sync started…');
-      const r = await post(`/api/accounts/${a.id}/sync`, { full: true }); ctx.toast(r.ok ? `Collected ${r.posts} posts` : r.error, r.ok ? 'ok' : 'bad'); await update();
+      const r = await post(`/api/accounts/${a.id}/sync`, { full: true }); ctx.toast(r.ok ? `Collected: ${r.message || r.posts + ' posts'}` : r.error, r.ok && r.posts ? 'ok' : 'bad'); await update();
     } }, 'Full re-sync');
     if (a.coverage === 'none') return h('span', { class: 'badge warn' }, 'No posts yet');
     if (a.coverage === 'partial') return h('div', null, h('span', { class: 'badge warn', title: 'Older posts inside the selected period may be missing' }, icon('warn'), 'Partial'), h('div', { class: 'small muted' }, `${int(stored)}${of} posts, ${back}`), a.status !== 'demo' && a.status !== 'manual' ? fullBtn : null);
@@ -230,7 +230,7 @@ export function createDetail(ctx, id) {
         h('td', { class: 'num' }, h('strong', null, compact(a.interactions))),
         h('td', { class: 'num' }, compact(a.avgInteractions)),
         h('td', { class: 'num' }, a.engagementRate === null ? '—' : pct(a.engagementRate, 2)),
-        h('td', null, a.status !== 'demo' && a.status !== 'manual' ? h('button', { class: 'btn ghost sm', title: 'Sync now', onClick: async (e) => { e.currentTarget.disabled = true; const r = await post(`/api/accounts/${a.id}/sync`); ctx.toast(r.ok ? `Synced: ${r.posts} posts` : r.error, r.ok ? 'ok' : 'bad'); await update(); } }, icon('sync')) : null),
+        h('td', null, a.status !== 'demo' && a.status !== 'manual' ? h('button', { class: 'btn ghost sm', title: 'Sync now', onClick: async (e) => { e.currentTarget.disabled = true; const r = await post(`/api/accounts/${a.id}/sync`); ctx.toast(r.ok ? `Synced: ${r.message || r.posts + ' posts'}` : r.error, r.ok && r.posts ? 'ok' : 'bad'); await update(); } }, icon('sync')) : null),
       )),
       (() => {
         const t = d.totals;

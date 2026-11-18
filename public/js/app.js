@@ -77,7 +77,7 @@ document.body.append(toasts);
 function toast(message, kind = 'ok') {
   const t = h('div', { class: `toast ${kind}` }, message);
   toasts.append(t);
-  setTimeout(() => t.remove(), kind === 'bad' ? 7000 : 3500);
+  setTimeout(() => t.remove(), kind === 'bad' ? 12000 : 3500);
 }
 const showError = (err) => { console.error(err); if (err?.status !== 401) toast(err.message || String(err), 'bad'); };
 

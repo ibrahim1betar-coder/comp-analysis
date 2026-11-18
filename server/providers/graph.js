@@ -48,7 +48,9 @@ export async function instagramFetch(username, creds, { since, maxPosts }) {
     after = bd.media?.paging?.cursors?.after;
     if (!after || !bd.media?.paging?.next) break;
   }
-  return { profile, posts };
+  const diagnostics = [];
+  if (!posts.length && profile?.postsCount) diagnostics.push(`Meta reports ${profile.postsCount} posts for @${username} but Business Discovery returned none. Check that the token was generated with instagram_basic and instagram_manage_insights, that your own Instagram account is a professional account linked to your Facebook Page, and that the competitor is a business/creator account. The Apify source has no such requirement.`);
+  return { profile, posts, diagnostics };
 }
 
 const fbType = (p) => {
@@ -90,7 +92,9 @@ export async function facebookFetch(page, creds, { since, maxPosts }) {
     }
     url = data.paging?.next || null;
   }
-  return { profile, posts };
+  const diagnostics = [];
+  if (!posts.length) diagnostics.push(`Meta returned no posts for the Page "${profile.displayName}". For Pages you do not manage, Meta only returns posts once your app has the "Page Public Content Access" feature approved (App Review). Until then, set Facebook's data source to Apify.`);
+  return { profile, posts, diagnostics };
 }
 
 /** OAuth helpers for "Connect with Facebook". */

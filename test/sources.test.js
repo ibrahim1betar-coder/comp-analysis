@@ -29,7 +29,10 @@ test('Meta Graph API: Instagram business discovery and Facebook page posts', asy
     assert.equal(ig.posts[0].type, 'reel');
     assert.equal(ig.posts[0].views, null); // Meta does not expose competitors' plays
     assert.equal(ig.posts[1].thumbnailUrl, 'https://x/img.jpg');
+    const empty = await facebookFetch('rival', { accessToken: 't' }, { since: null, maxPosts: 0 });
+    assert.match(empty.diagnostics[0], /Page Public Content Access/);
     const fb = await facebookFetch('rival', { accessToken: 't' }, { since: null, maxPosts: 50 });
+    assert.equal(fb.diagnostics.length, 0);
     assert.equal(fb.profile.followers, 1000);
     assert.deepEqual({ l: fb.posts[0].likes, c: fb.posts[0].comments, s: fb.posts[0].shares, t: fb.posts[0].type }, { l: 40, c: 4, s: 3, t: 'video' });
   });

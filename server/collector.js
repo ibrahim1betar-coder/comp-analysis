@@ -99,8 +99,14 @@ export async function syncAccount(accountId, { full = false } = {}) {
     const since = computeSince(account, { full });
     const result = await provider.fetchAccount(account.handle, creds, { since, maxPosts: config.postsPerAccount });
     const count = storeAccountData(accountId, account.platform, result);
-    stmt('UPDATE sync_runs SET finished_at = ?, ok = 1, message = ?, posts_upserted = ? WHERE id = ?').run(nowIso(), `${count} posts`, count, runId);
-    return { ok: true, posts: count };
+    const source = creds.source || provider.defaultSource || (provider.credentialFields.some((f) => f.shared === 'apify') ? 'apify' : 'api');
+    let message = since ? `${count} posts new or updated since ${since.slice(0, 10)}` : `${count} posts`;
+    if (!count && result.diagnostics?.length) message += ` · ${result.diagnostics.join(' ')}`;
+    else if (!count && since) message += ' (nothing newer; older posts are already stored)';
+    else if (!count) message += ` · the ${source} source returned no posts for this account`;
+    stmt('UPDATE sync_runs SET finished_at = ?, ok = 1, message = ?, posts_upserted = ? WHERE id = ?').run(nowIso(), message.slice(0, 900), count, runId);
+    if (!count && result.diagnostics?.length) stmt(`UPDATE accounts SET last_error = ? WHERE id = ?`).run(result.diagnostics.join(' ').slice(0, 500), accountId);
+    return { ok: true, posts: count, message, warning: !count ? message : null };
   } catch (err) {
     const message = err.message || String(err);
     stmt(`UPDATE accounts SET status = 'error', last_error = ? WHERE id = ?`).run(message.slice(0, 500), accountId);
